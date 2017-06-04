@@ -22,9 +22,6 @@ import android.util.Log;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
-import org.telegram.messenger.support.util.ThreadUtil;
-import org.telegram.messenger.support.util.TileList;
-
 /**
  * A utility class that supports asynchronous content loading.
  * <p>
@@ -47,9 +44,9 @@ import org.telegram.messenger.support.util.TileList;
  *
  */
 public class AsyncListUtil<T> {
-    private static final String TAG = "AsyncListUtil";
+    static final String TAG = "AsyncListUtil";
 
-    private static final boolean DEBUG = false;
+    static final boolean DEBUG = false;
 
     final Class<T> mTClass;
     final int mTileSize;
@@ -65,17 +62,17 @@ public class AsyncListUtil<T> {
     final int[] mPrevRange = new int[2];
     final int[] mTmpRangeExtended = new int[2];
 
-    private boolean mAllowScrollHints;
+    boolean mAllowScrollHints;
     private int mScrollHint = ViewCallback.HINT_SCROLL_NONE;
 
-    private int mItemCount = 0;
+    int mItemCount = 0;
 
     int mDisplayedGeneration = 0;
     int mRequestedGeneration = mDisplayedGeneration;
 
-    final private SparseIntArray mMissingPositions = new SparseIntArray();
+    final SparseIntArray mMissingPositions = new SparseIntArray();
 
-    private void log(String s, Object... args) {
+    void log(String s, Object... args) {
         Log.d(TAG, "[MAIN] " + String.format(s, args));
     }
 
@@ -174,7 +171,7 @@ public class AsyncListUtil<T> {
         return mItemCount;
     }
 
-    private void updateRange() {
+    void updateRange() {
         mViewCallback.getItemRangeInto(mTmpRange);
         if (mTmpRange[0] > mTmpRange[1] || mTmpRange[0] < 0) {
             return;

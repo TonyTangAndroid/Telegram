@@ -3,21 +3,18 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui;
 
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.os.Build;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.FrameLayout;
-import android.widget.ListView;
 
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
@@ -28,21 +25,28 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
+import org.telegram.messenger.support.widget.LinearLayoutManager;
+import org.telegram.messenger.support.widget.RecyclerView;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
-import org.telegram.ui.ActionBar.ActionBarMenu;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.Adapters.BaseFragmentAdapter;
+import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeDescription;
+import org.telegram.ui.Cells.HeaderCell;
+import org.telegram.ui.Cells.RadioCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
+import org.telegram.ui.Cells.TextCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Cells.UserCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.EmptyTextProgressView;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.RecyclerListView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -52,6 +56,7 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
 
     private ListAdapter listViewAdapter;
     private EmptyTextProgressView emptyView;
+    private RecyclerListView listView;
 
     private ArrayList<TLRPC.ChannelParticipant> participants = new ArrayList<>();
     private int chatId;
@@ -59,6 +64,7 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
     private boolean loadingUsers;
     private boolean firstLoaded;
     private boolean isAdmin;
+    private boolean isModerator;
     private boolean isPublic;
     private boolean isMegagroup;
     private int participantsStartRow;
@@ -72,13 +78,15 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
             if (chat.creator) {
                 isAdmin = true;
                 isPublic = (chat.flags & TLRPC.CHAT_FLAG_IS_PUBLIC) != 0;
+            } else if (chat.editor) {
+                isModerator = true;
             }
             isMegagroup = chat.megagroup;
         }
         if (type == 0) {
             participantsStartRow = 0;
         } else if (type == 1) {
-            participantsStartRow = isAdmin ? 2 : 0;
+            participantsStartRow = isAdmin && isMegagroup ? 4 : 0;
         } else if (type == 2) {
             participantsStartRow = isAdmin ? (isPublic ? 2 : 3) : 0;
         }
@@ -118,10 +126,8 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
             }
         });
 
-        ActionBarMenu menu = actionBar.createMenu();
-
         fragmentView = new FrameLayout(context);
-        fragmentView.setBackgroundColor(0xfff0f0f0);
+        fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
         FrameLayout frameLayout = (FrameLayout) fragmentView;
 
         emptyView = new EmptyTextProgressView(context);
@@ -134,29 +140,24 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
         }
         frameLayout.addView(emptyView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
-        ListView listView = new ListView(context);
+        listView = new RecyclerListView(context);
         listView.setEmptyView(emptyView);
-        listView.setDivider(null);
-        listView.setDividerHeight(0);
-        listView.setDrawSelectorOnTop(true);
+        listView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
         listView.setAdapter(listViewAdapter = new ListAdapter(context));
-        if (Build.VERSION.SDK_INT >= 11) {
-            listView.setVerticalScrollbarPosition(LocaleController.isRTL ? ListView.SCROLLBAR_POSITION_LEFT : ListView.SCROLLBAR_POSITION_RIGHT);
-        }
+        listView.setVerticalScrollbarPosition(LocaleController.isRTL ? RecyclerListView.SCROLLBAR_POSITION_LEFT : RecyclerListView.SCROLLBAR_POSITION_RIGHT);
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        listView.setOnItemClickListener(new RecyclerListView.OnItemClickListener() {
             @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+            public void onItemClick(View view, int position) {
                 if (type == 2) {
                     if (isAdmin) {
-                        if (i == 0) {
+                        if (position == 0) {
                             Bundle args = new Bundle();
                             args.putBoolean("onlyUsers", true);
                             args.putBoolean("destroyAfterSelect", true);
                             args.putBoolean("returnAsResult", true);
                             args.putBoolean("needForwardCount", false);
-                            args.putBoolean("allowUsernameSearch", false);
                             args.putString("selectAlertString", LocaleController.getString("ChannelAddTo", R.string.ChannelAddTo));
                             ContactsActivity fragment = new ContactsActivity(args);
                             fragment.setDelegate(new ContactsActivity.ContactsActivityDelegate() {
@@ -166,23 +167,49 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
                                 }
                             });
                             presentFragment(fragment);
-                        } else if (!isPublic && i == 1) {
+                        } else if (!isPublic && position == 1) {
                             presentFragment(new GroupInviteActivity(chatId));
                         }
                     }
 
                 } else if (type == 1) {
                     if (isAdmin) {
-                        if (i == 0) {
+                        if (isMegagroup && (position == 1 || position == 2)) {
+                            TLRPC.Chat chat = MessagesController.getInstance().getChat(chatId);
+                            if (chat == null) {
+                                return;
+                            }
+                            boolean changed = false;
+                            if (position == 1 && !chat.democracy) {
+                                chat.democracy = true;
+                                changed = true;
+                            } else if (position == 2 && chat.democracy) {
+                                chat.democracy = false;
+                                changed = true;
+                            }
+                            if (changed) {
+                                MessagesController.getInstance().toogleChannelInvites(chatId, chat.democracy);
+                                int count = listView.getChildCount();
+                                for (int a = 0; a < count; a++) {
+                                    View child = listView.getChildAt(a);
+                                    if (child instanceof RadioCell) {
+                                        int num = (Integer) child.getTag();
+                                        ((RadioCell) child).setChecked(num == 0 && chat.democracy || num == 1 && !chat.democracy, true);
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                        if (position == participantsStartRow + participants.size()) {
                             Bundle args = new Bundle();
                             args.putBoolean("onlyUsers", true);
                             args.putBoolean("destroyAfterSelect", true);
                             args.putBoolean("returnAsResult", true);
                             args.putBoolean("needForwardCount", false);
-                            args.putBoolean("allowUsernameSearch", true);
-                            if (isMegagroup) {
+                            args.putBoolean("addingToChannel", !isMegagroup);
+                            /*if (isMegagroup) {
                                 args.putBoolean("allowBots", false);
-                            }
+                            }*/
                             args.putString("selectAlertString", LocaleController.getString("ChannelAddUserAdminAlert", R.string.ChannelAddUserAdminAlert));
                             ContactsActivity fragment = new ContactsActivity(args);
                             fragment.setDelegate(new ContactsActivity.ContactsActivityDelegate() {
@@ -192,12 +219,13 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
                                 }
                             });
                             presentFragment(fragment);
+                            return;
                         }
                     }
                 }
                 TLRPC.ChannelParticipant participant = null;
-                if (i >= participantsStartRow && i < participants.size() + participantsStartRow) {
-                    participant = participants.get(i - participantsStartRow);
+                if (position >= participantsStartRow && position < participants.size() + participantsStartRow) {
+                    participant = participants.get(position - participantsStartRow);
                 }
                 if (participant != null) {
                     Bundle args = new Bundle();
@@ -207,18 +235,21 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
             }
         });
 
-        if (isAdmin || isMegagroup && type == 0) {
-            listView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+        if (isAdmin || isModerator && type == 2 || isMegagroup && type == 0) {
+            listView.setOnItemLongClickListener(new RecyclerListView.OnItemLongClickListener() {
                 @Override
-                public boolean onItemLongClick(AdapterView<?> adapterView, View view, int i, long l) {
+                public boolean onItemClick(View view, int position) {
                     if (getParentActivity() == null) {
                         return false;
                     }
                     TLRPC.ChannelParticipant participant = null;
-                    if (i >= participantsStartRow && i < participants.size() + participantsStartRow) {
-                        participant = participants.get(i - participantsStartRow);
+                    if (position >= participantsStartRow && position < participants.size() + participantsStartRow) {
+                        participant = participants.get(position - participantsStartRow);
                     }
                     if (participant != null) {
+                        if (participant.user_id == UserConfig.getClientUserId()) {
+                            return false;
+                        }
                         final TLRPC.ChannelParticipant finalParticipant = participant;
                         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
                         CharSequence[] items = null;
@@ -243,16 +274,18 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
                                         ConnectionsManager.getInstance().sendRequest(req, new RequestDelegate() {
                                             @Override
                                             public void run(TLObject response, TLRPC.TL_error error) {
-                                                final TLRPC.Updates updates = (TLRPC.Updates) response;
-                                                MessagesController.getInstance().processUpdates(updates, false);
-                                                if (!updates.chats.isEmpty()) {
-                                                    AndroidUtilities.runOnUIThread(new Runnable() {
-                                                        @Override
-                                                        public void run() {
-                                                            TLRPC.Chat chat = updates.chats.get(0);
-                                                            MessagesController.getInstance().loadFullChat(chat.id, 0, true);
-                                                        }
-                                                    }, 1000);
+                                                if (response != null) {
+                                                    final TLRPC.Updates updates = (TLRPC.Updates) response;
+                                                    MessagesController.getInstance().processUpdates(updates, false);
+                                                    if (!updates.chats.isEmpty()) {
+                                                        AndroidUtilities.runOnUIThread(new Runnable() {
+                                                            @Override
+                                                            public void run() {
+                                                                TLRPC.Chat chat = updates.chats.get(0);
+                                                                MessagesController.getInstance().loadFullChat(chat.id, 0, true);
+                                                            }
+                                                        }, 1000);
+                                                    }
                                                 }
                                             }
                                         });
@@ -285,7 +318,7 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
         if (user == null || role == null) {
             return;
         }
-        TLRPC.TL_channels_editAdmin req = new TLRPC.TL_channels_editAdmin();
+        final TLRPC.TL_channels_editAdmin req = new TLRPC.TL_channels_editAdmin();
         req.channel = MessagesController.getInputChannel(chatId);
         req.user_id = MessagesController.getInputUser(user);
         req.role = role;
@@ -304,7 +337,7 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
                     AndroidUtilities.runOnUIThread(new Runnable() {
                         @Override
                         public void run() {
-                            AlertsCreator.showAddUserAlert(error.text, ChannelUsersActivity.this, !isMegagroup);
+                            AlertsCreator.processError(error, ChannelUsersActivity.this, req, !isMegagroup);
                         }
                     });
                 }
@@ -430,7 +463,7 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
                                     });
                                 }
                             } catch (Exception e) {
-                                FileLog.e("tmessages", e);
+                                FileLog.e(e);
                             }
                         }
                         loadingUsers = false;
@@ -456,7 +489,8 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
         }
     }
 
-    private class ListAdapter extends BaseFragmentAdapter {
+    private class ListAdapter extends RecyclerListView.SelectionAdapter {
+
         private Context mContext;
 
         public ListAdapter(Context context) {
@@ -464,153 +498,185 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
         }
 
         @Override
-        public boolean areAllItemsEnabled() {
-            return false;
-        }
-
-        @Override
-        public boolean isEnabled(int i) {
+        public boolean isEnabled(RecyclerView.ViewHolder holder) {
+            int postion = holder.getAdapterPosition();
             if (type == 2) {
                 if (isAdmin) {
                     if (!isPublic) {
-                        if (i == 0 || i == 1) {
+                        if (postion == 0 || postion == 1) {
                             return true;
-                        } else if (i == 2) {
+                        } else if (postion == 2) {
                             return false;
                         }
                     } else {
-                        if (i == 0) {
+                        if (postion == 0) {
                             return true;
-                        } else if (i == 1) {
+                        } else if (postion == 1) {
                             return false;
                         }
                     }
                 }
             } else if (type == 1) {
-                if (isAdmin) {
-                    if (i == 0) {
-                        return true;
-                    } else if (i == 1) {
-                        return false;
-                    }
+                if (postion == participantsStartRow + participants.size()) {
+                    return isAdmin;
+                } else if (postion == participantsStartRow + participants.size() + 1) {
+                    return false;
+                } else if (isMegagroup && isAdmin && postion < 4) {
+                    return postion == 1 || postion == 2;
                 }
             }
-            return i != participants.size() + participantsStartRow && participants.get(i - participantsStartRow).user_id != UserConfig.getClientUserId();
+            return postion != participants.size() + participantsStartRow && participants.get(postion - participantsStartRow).user_id != UserConfig.getClientUserId();
         }
 
         @Override
-        public int getCount() {
+        public int getItemCount() {
             if (participants.isEmpty() && type == 0 || loadingUsers && !firstLoaded) {
                 return 0;
+            } else if (type == 1) {
+                return participants.size() + (isAdmin ? 2 : 1) + (isAdmin && isMegagroup ? 4 : 0);
             }
             return participants.size() + participantsStartRow + 1;
         }
 
         @Override
-        public Object getItem(int i) {
-            return null;
-        }
-
-        @Override
-        public long getItemId(int i) {
-            return i;
-        }
-
-        @Override
-        public boolean hasStableIds() {
-            return false;
-        }
-
-        @Override
-        public View getView(int i, View view, ViewGroup viewGroup) {
-            int viewType = getItemViewType(i);
-            if (viewType == 0) {
-                if (view == null) {
-                    view = new UserCell(mContext, 1, 0);
-                    view.setBackgroundColor(0xffffffff);
-                }
-                UserCell userCell = (UserCell) view;
-                TLRPC.ChannelParticipant participant = participants.get(i - participantsStartRow);
-                TLRPC.User user = MessagesController.getInstance().getUser(participant.user_id);
-                if (user != null) {
-                    if (type == 0) {
-                        userCell.setData(user, null, user.phone != null && user.phone.length() != 0 ? PhoneFormat.getInstance().format("+" + user.phone) : LocaleController.getString("NumberUnknown", R.string.NumberUnknown), 0);
-                    } else if (type == 1) {
-                        String role = null;
-                        if (participant instanceof TLRPC.TL_channelParticipantCreator || participant instanceof TLRPC.TL_channelParticipantSelf) {
-                            role = LocaleController.getString("ChannelCreator", R.string.ChannelCreator);
-                        } else if (participant instanceof TLRPC.TL_channelParticipantModerator) {
-                            role = LocaleController.getString("ChannelModerator", R.string.ChannelModerator);
-                        }  else if (participant instanceof TLRPC.TL_channelParticipantEditor) {
-                            role = LocaleController.getString("ChannelEditor", R.string.ChannelEditor);
-                        }
-                        userCell.setData(user, null, role, 0);
-                    } else if (type == 2) {
-                        userCell.setData(user, null, null, 0);
-                    }
-                }
-            } else if (viewType == 1) {
-                if (view == null) {
+        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view;
+            switch (viewType) {
+                case 0:
+                    view = new UserCell(mContext, 1, 0, false);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
+                case 1:
                     view = new TextInfoPrivacyCell(mContext);
-                }
-                if (type == 0) {
-                    ((TextInfoPrivacyCell) view).setText(String.format("%1$s\n\n%2$s", LocaleController.getString("NoBlockedGroup", R.string.NoBlockedGroup), LocaleController.getString("UnblockText", R.string.UnblockText)));
-                    view.setBackgroundResource(R.drawable.greydivider_bottom);
-                } else if (type == 1) {
-                    if (i == 1 && isAdmin) {
-                        if (isMegagroup) {
-                            ((TextInfoPrivacyCell) view).setText(LocaleController.getString("MegaAdminsInfo", R.string.MegaAdminsInfo));
-                        } else {
-                            ((TextInfoPrivacyCell) view).setText(LocaleController.getString("ChannelAdminsInfo", R.string.ChannelAdminsInfo));
-                        }
-                        view.setBackgroundResource(R.drawable.greydivider);
-                    } else {
-                        ((TextInfoPrivacyCell) view).setText("");
-                        view.setBackgroundResource(R.drawable.greydivider_bottom);
-                    }
-                } else if (type == 2) {
-                    if ((!isPublic && i == 2 || i == 1) && isAdmin) {
-                        if (isMegagroup) {
-                            ((TextInfoPrivacyCell) view).setText("");
-                        } else {
-                            ((TextInfoPrivacyCell) view).setText(LocaleController.getString("ChannelMembersInfo", R.string.ChannelMembersInfo));
-                        }
-                        view.setBackgroundResource(R.drawable.greydivider);
-                    } else {
-                        ((TextInfoPrivacyCell) view).setText("");
-                        view.setBackgroundResource(R.drawable.greydivider_bottom);
-                    }
-                }
-            } else if (viewType == 2) {
-                if (view == null) {
+                    break;
+                case 2:
                     view = new TextSettingsCell(mContext);
-                    view.setBackgroundColor(0xffffffff);
-                }
-                TextSettingsCell actionCell = (TextSettingsCell) view;
-                if (type == 2) {
-                    if (i == 0) {
-                        actionCell.setText(LocaleController.getString("AddMember", R.string.AddMember), true);
-                    } else if (i == 1) {
-                        actionCell.setText(LocaleController.getString("ChannelInviteViaLink", R.string.ChannelInviteViaLink), false);
-                    }
-                } else if (type == 1) {
-                    actionCell.setText(LocaleController.getString("ChannelAddAdmin", R.string.ChannelAddAdmin), true);
-                }
-            } else if (viewType == 3) {
-                if (view == null) {
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
+                case 3:
                     view = new ShadowSectionCell(mContext);
-                }
+                    break;
+                case 4:
+                    view = new TextCell(mContext);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
+                case 5:
+                    view = new HeaderCell(mContext);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
+                case 6:
+                default:
+                    view = new RadioCell(mContext);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
             }
-            return view;
+            return new RecyclerListView.Holder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+            switch (holder.getItemViewType()) {
+                case 0:
+                    UserCell userCell = (UserCell) holder.itemView;
+                    TLRPC.ChannelParticipant participant = participants.get(position - participantsStartRow);
+                    TLRPC.User user = MessagesController.getInstance().getUser(participant.user_id);
+                    if (user != null) {
+                        if (type == 0) {
+                            userCell.setData(user, null, user.phone != null && user.phone.length() != 0 ? PhoneFormat.getInstance().format("+" + user.phone) : LocaleController.getString("NumberUnknown", R.string.NumberUnknown), 0);
+                        } else if (type == 1) {
+                            String role = null;
+                            if (participant instanceof TLRPC.TL_channelParticipantCreator || participant instanceof TLRPC.TL_channelParticipantSelf) {
+                                role = LocaleController.getString("ChannelCreator", R.string.ChannelCreator);
+                            } else if (participant instanceof TLRPC.TL_channelParticipantModerator) {
+                                role = LocaleController.getString("ChannelModerator", R.string.ChannelModerator);
+                            }  else if (participant instanceof TLRPC.TL_channelParticipantEditor) {
+                                role = LocaleController.getString("ChannelEditor", R.string.ChannelEditor);
+                            }
+                            userCell.setData(user, null, role, 0);
+                        } else if (type == 2) {
+                            userCell.setData(user, null, null, 0);
+                        }
+                    }
+                    break;
+                case 1:
+                    TextInfoPrivacyCell privacyCell = (TextInfoPrivacyCell) holder.itemView;
+                    if (type == 0) {
+                        privacyCell.setText(String.format("%1$s\n\n%2$s", LocaleController.getString("NoBlockedGroup", R.string.NoBlockedGroup), LocaleController.getString("UnblockText", R.string.UnblockText)));
+                        privacyCell.setBackgroundDrawable(Theme.getThemedDrawable(mContext, R.drawable.greydivider_bottom, Theme.key_windowBackgroundGrayShadow));
+                    } else if (type == 1) {
+                        if (isAdmin) {
+                            if (isMegagroup) {
+                                privacyCell.setText(LocaleController.getString("MegaAdminsInfo", R.string.MegaAdminsInfo));
+                            } else {
+                                privacyCell.setText(LocaleController.getString("ChannelAdminsInfo", R.string.ChannelAdminsInfo));
+                            }
+                            privacyCell.setBackgroundDrawable(Theme.getThemedDrawable(mContext, R.drawable.greydivider_bottom, Theme.key_windowBackgroundGrayShadow));
+                        } else {
+                            privacyCell.setText("");
+                            privacyCell.setBackgroundDrawable(Theme.getThemedDrawable(mContext, R.drawable.greydivider_bottom, Theme.key_windowBackgroundGrayShadow));
+                        }
+                    } else if (type == 2) {
+                        if ((!isPublic && position == 2 || position == 1) && isAdmin) {
+                            if (isMegagroup) {
+                                privacyCell.setText("");
+                            } else {
+                                privacyCell.setText(LocaleController.getString("ChannelMembersInfo", R.string.ChannelMembersInfo));
+                            }
+                            privacyCell.setBackgroundDrawable(Theme.getThemedDrawable(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
+                        } else {
+                            privacyCell.setText("");
+                            privacyCell.setBackgroundDrawable(Theme.getThemedDrawable(mContext, R.drawable.greydivider_bottom, Theme.key_windowBackgroundGrayShadow));
+                        }
+                    }
+                    break;
+                case 2:
+                    TextSettingsCell actionCell = (TextSettingsCell) holder.itemView;
+                    if (type == 2) {
+                        if (position == 0) {
+                            actionCell.setText(LocaleController.getString("AddMember", R.string.AddMember), true);
+                        } else if (position == 1) {
+                            actionCell.setText(LocaleController.getString("ChannelInviteViaLink", R.string.ChannelInviteViaLink), false);
+                        }
+                    } else if (type == 1) {
+                        actionCell.setTextAndIcon(LocaleController.getString("ChannelAddAdmin", R.string.ChannelAddAdmin), R.drawable.managers, false);
+                    }
+                    break;
+                case 4:
+                    ((TextCell) holder.itemView).setTextAndIcon(LocaleController.getString("ChannelAddAdmin", R.string.ChannelAddAdmin), R.drawable.managers);
+                    break;
+                case 5:
+                    ((HeaderCell) holder.itemView).setText(LocaleController.getString("WhoCanAddMembers", R.string.WhoCanAddMembers));
+                    break;
+                case 6:
+                    RadioCell radioCell = (RadioCell) holder.itemView;
+                    TLRPC.Chat chat = MessagesController.getInstance().getChat(chatId);
+                    if (position == 1) {
+                        radioCell.setTag(0);
+                        radioCell.setText(LocaleController.getString("WhoCanAddMembersAllMembers", R.string.WhoCanAddMembersAllMembers), chat != null && chat.democracy, true);
+                    } else if (position == 2) {
+                        radioCell.setTag(1);
+                        radioCell.setText(LocaleController.getString("WhoCanAddMembersAdmins", R.string.WhoCanAddMembersAdmins), chat != null && !chat.democracy, false);
+                    }
+                    break;
+            }
         }
 
         @Override
         public int getItemViewType(int i) {
             if (type == 1) {
                 if (isAdmin) {
-                    if (i == 0) {
-                        return 2;
-                    } else if (i == 1) {
+                    if (isMegagroup) {
+                        if (i == 0) {
+                            return 5;
+                        } else if (i == 1 || i == 2) {
+                            return 6;
+                        } else if (i == 3) {
+                            return 3;
+                        }
+                    }
+                    if (i == participantsStartRow + participants.size()) {
+                        return 4;
+                    } else if (i == participantsStartRow + participants.size() + 1) {
                         return 1;
                     }
                 }
@@ -636,15 +702,66 @@ public class ChannelUsersActivity extends BaseFragment implements NotificationCe
             }
             return 0;
         }
+    }
 
-        @Override
-        public int getViewTypeCount() {
-            return 4;
-        }
+    @Override
+    public ThemeDescription[] getThemeDescriptions() {
+        ThemeDescription.ThemeDescriptionDelegate сellDelegate = new ThemeDescription.ThemeDescriptionDelegate() {
+            @Override
+            public void didSetColor(int color) {
+                int count = listView.getChildCount();
+                for (int a = 0; a < count; a++) {
+                    View child = listView.getChildAt(a);
+                    if (child instanceof UserCell) {
+                        ((UserCell) child).update(0);
+                    }
+                }
+            }
+        };
 
-        @Override
-        public boolean isEmpty() {
-            return participants.isEmpty();
-        }
+        return new ThemeDescription[]{
+                new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{UserCell.class, TextSettingsCell.class, TextCell.class, RadioCell.class}, null, null, null, Theme.key_windowBackgroundWhite),
+                new ThemeDescription(fragmentView, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundGray),
+
+                new ThemeDescription(actionBar, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_actionBarDefault),
+                new ThemeDescription(listView, ThemeDescription.FLAG_LISTGLOWCOLOR, null, null, null, null, Theme.key_actionBarDefault),
+                new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_ITEMSCOLOR, null, null, null, null, Theme.key_actionBarDefaultIcon),
+                new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_TITLECOLOR, null, null, null, null, Theme.key_actionBarDefaultTitle),
+                new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SELECTORCOLOR, null, null, null, null, Theme.key_actionBarDefaultSelector),
+
+                new ThemeDescription(listView, ThemeDescription.FLAG_SELECTOR, null, null, null, null, Theme.key_listSelector),
+
+                new ThemeDescription(listView, 0, new Class[]{View.class}, Theme.dividerPaint, null, null, Theme.key_divider),
+
+                new ThemeDescription(listView, ThemeDescription.FLAG_BACKGROUNDFILTER, new Class[]{TextInfoPrivacyCell.class}, null, null, null, Theme.key_windowBackgroundGrayShadow),
+                new ThemeDescription(listView, 0, new Class[]{TextInfoPrivacyCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteGrayText4),
+
+                new ThemeDescription(listView, 0, new Class[]{TextSettingsCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText),
+                new ThemeDescription(listView, 0, new Class[]{TextSettingsCell.class}, new String[]{"valueTextView"}, null, null, null, Theme.key_windowBackgroundWhiteValueText),
+                new ThemeDescription(listView, 0, new Class[]{TextSettingsCell.class}, new String[]{"valueImageView"}, null, null, null, Theme.key_windowBackgroundWhiteGrayIcon),
+
+                new ThemeDescription(listView, ThemeDescription.FLAG_BACKGROUNDFILTER, new Class[]{ShadowSectionCell.class}, null, null, null, Theme.key_windowBackgroundGrayShadow),
+
+                new ThemeDescription(listView, 0, new Class[]{HeaderCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlueHeader),
+
+                new ThemeDescription(listView, 0, new Class[]{RadioCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText),
+                new ThemeDescription(listView, ThemeDescription.FLAG_CHECKBOX, new Class[]{RadioCell.class}, new String[]{"radioButton"}, null, null, null, Theme.key_radioBackground),
+                new ThemeDescription(listView, ThemeDescription.FLAG_CHECKBOXCHECK, new Class[]{RadioCell.class}, new String[]{"radioButton"}, null, null, null, Theme.key_radioBackgroundChecked),
+
+                new ThemeDescription(listView, 0, new Class[]{UserCell.class}, new String[]{"nameTextView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText),
+                new ThemeDescription(listView, 0, new Class[]{UserCell.class}, new String[]{"statusColor"}, null, null, сellDelegate, Theme.key_windowBackgroundWhiteGrayText),
+                new ThemeDescription(listView, 0, new Class[]{UserCell.class}, new String[]{"statusOnlineColor"}, null, null, сellDelegate, Theme.key_windowBackgroundWhiteBlueText),
+                new ThemeDescription(listView, 0, new Class[]{UserCell.class}, null, new Drawable[]{Theme.avatar_photoDrawable, Theme.avatar_broadcastDrawable}, null, Theme.key_avatar_text),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundRed),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundOrange),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundViolet),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundGreen),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundCyan),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundBlue),
+                new ThemeDescription(null, 0, null, null, null, сellDelegate, Theme.key_avatar_backgroundPink),
+
+                new ThemeDescription(listView, 0, new Class[]{TextCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText),
+                new ThemeDescription(listView, 0, new Class[]{TextCell.class}, new String[]{"imageView"}, null, null, null, Theme.key_windowBackgroundWhiteGrayIcon),
+        };
     }
 }

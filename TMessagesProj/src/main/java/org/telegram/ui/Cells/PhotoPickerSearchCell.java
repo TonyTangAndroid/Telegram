@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Cells;
@@ -23,6 +23,7 @@ import android.widget.TextView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
 
 public class PhotoPickerSearchCell extends LinearLayout {
@@ -44,7 +45,7 @@ public class PhotoPickerSearchCell extends LinearLayout {
             setBackgroundColor(0xff1a1a1a);
 
             selector = new View(context);
-            selector.setBackgroundResource(R.drawable.list_selector);
+            selector.setBackgroundDrawable(Theme.getSelectorDrawable(false));
             addView(selector, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
             imageView = new ImageView(context);
@@ -81,7 +82,7 @@ public class PhotoPickerSearchCell extends LinearLayout {
 
     private PhotoPickerSearchCellDelegate delegate;
 
-    public PhotoPickerSearchCell(Context context) {
+    public PhotoPickerSearchCell(Context context, boolean allowGifs) {
         super(context);
         setOrientation(HORIZONTAL);
 
@@ -125,14 +126,18 @@ public class PhotoPickerSearchCell extends LinearLayout {
         layoutParams.height = AndroidUtilities.dp(48);
         layoutParams.width = 0;
         searchButton.setLayoutParams(layoutParams);
-        searchButton.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (delegate != null) {
-                    delegate.didPressedSearchButton(1);
+        if (allowGifs) {
+            searchButton.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (delegate != null) {
+                        delegate.didPressedSearchButton(1);
+                    }
                 }
-            }
-        });
+            });
+        } else {
+            searchButton.setAlpha(0.5f);
+        }
     }
 
     public void setDelegate(PhotoPickerSearchCellDelegate delegate) {
@@ -141,6 +146,6 @@ public class PhotoPickerSearchCell extends LinearLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(52), MeasureSpec.EXACTLY));
+        super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(52), MeasureSpec.EXACTLY));
     }
 }

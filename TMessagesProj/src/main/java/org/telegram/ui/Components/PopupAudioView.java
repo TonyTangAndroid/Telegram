@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Components;
@@ -22,8 +22,9 @@ import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.FileLoader;
-import org.telegram.messenger.R;
 import org.telegram.messenger.MessageObject;
+import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.BaseCell;
 
 import java.io.File;
@@ -33,10 +34,7 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
     private boolean wasLayout = false;
     protected MessageObject currentMessageObject;
 
-    private static Drawable backgroundMediaDrawableIn;
-
-    private static Drawable[][] statesDrawable = new Drawable[8][2];
-    private static TextPaint timePaint;
+    private TextPaint timePaint;
 
     private SeekBar seekBar;
     private ProgressView progressView;
@@ -57,41 +55,20 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
 
     public PopupAudioView(Context context) {
         super(context);
-        if (backgroundMediaDrawableIn == null) {
-            backgroundMediaDrawableIn = getResources().getDrawable(R.drawable.msg_in_photo);
-            statesDrawable[0][0] = getResources().getDrawable(R.drawable.play_w2);
-            statesDrawable[0][1] = getResources().getDrawable(R.drawable.play_w2_pressed);
-            statesDrawable[1][0] = getResources().getDrawable(R.drawable.pause_w2);
-            statesDrawable[1][1] = getResources().getDrawable(R.drawable.pause_w2_pressed);
-            statesDrawable[2][0] = getResources().getDrawable(R.drawable.download_g);
-            statesDrawable[2][1] = getResources().getDrawable(R.drawable.download_g_pressed);
-            statesDrawable[3][0] = getResources().getDrawable(R.drawable.pause_g);
-            statesDrawable[3][1] = getResources().getDrawable(R.drawable.pause_g_pressed);
-
-            statesDrawable[4][0] = getResources().getDrawable(R.drawable.play_w);
-            statesDrawable[4][1] = getResources().getDrawable(R.drawable.play_w_pressed);
-            statesDrawable[5][0] = getResources().getDrawable(R.drawable.pause_w);
-            statesDrawable[5][1] = getResources().getDrawable(R.drawable.pause_w_pressed);
-            statesDrawable[6][0] = getResources().getDrawable(R.drawable.download_b);
-            statesDrawable[6][1] = getResources().getDrawable(R.drawable.download_b_pressed);
-            statesDrawable[7][0] = getResources().getDrawable(R.drawable.pause_b);
-            statesDrawable[7][1] = getResources().getDrawable(R.drawable.pause_b_pressed);
-
-            timePaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
-            timePaint.setTextSize(AndroidUtilities.dp(16));
-        }
+        timePaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
+        timePaint.setTextSize(AndroidUtilities.dp(16));
 
         TAG = MediaController.getInstance().generateObserverTag();
 
         seekBar = new SeekBar(getContext());
-        seekBar.delegate = this;
+        seekBar.setDelegate(this);
         progressView = new ProgressView();
     }
 
     public void setMessageObject(MessageObject messageObject) {
         if (currentMessageObject != messageObject) {
-            seekBar.type = 1;
-            progressView.setProgressColors(0xffd9e2eb, 0xff86c5f8);
+            seekBar.setColors(Theme.getColor(Theme.key_chat_inAudioSeekbar), Theme.getColor(Theme.key_chat_inAudioSeekbarFill), Theme.getColor(Theme.key_chat_inAudioSeekbarSelected));
+            progressView.setProgressColors(0xffd9e2eb, 0xff86c5f8); //TODO
 
             currentMessageObject = messageObject;
             wasLayout = false;
@@ -122,8 +99,7 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
         buttonX = AndroidUtilities.dp(10);
         timeX = getMeasuredWidth() - timeWidth - AndroidUtilities.dp(16);
 
-        seekBar.width = getMeasuredWidth() - AndroidUtilities.dp(70) - timeWidth;
-        seekBar.height = AndroidUtilities.dp(30);
+        seekBar.setSize(getMeasuredWidth() - AndroidUtilities.dp(70) - timeWidth, AndroidUtilities.dp(30));
         progressView.width = getMeasuredWidth() - AndroidUtilities.dp(94) - timeWidth;
         progressView.height = AndroidUtilities.dp(30);
         seekBarY = AndroidUtilities.dp(13);
@@ -147,8 +123,8 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
             return;
         }
 
-        setDrawableBounds(backgroundMediaDrawableIn, 0, 0, getMeasuredWidth(), getMeasuredHeight());
-        backgroundMediaDrawableIn.draw(canvas);
+        setDrawableBounds(Theme.chat_msgInMediaDrawable, 0, 0, getMeasuredWidth(), getMeasuredHeight());
+        Theme.chat_msgInMediaDrawable.draw(canvas);
 
         if (currentMessageObject == null) {
             return;
@@ -164,9 +140,9 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
         }
         canvas.restore();
 
-        int state = buttonState + 4;
+        int state = buttonState + 5;
         timePaint.setColor(0xffa1aab3);
-        Drawable buttonDrawable = statesDrawable[state][buttonPressed];
+        Drawable buttonDrawable = Theme.chat_fileStatesDrawable[state][buttonPressed];
         int side = AndroidUtilities.dp(36);
         int x = (side - buttonDrawable.getIntrinsicWidth()) / 2;
         int y = (side - buttonDrawable.getIntrinsicHeight()) / 2;
@@ -232,7 +208,7 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
             boolean result = MediaController.getInstance().playAudio(currentMessageObject);
             if (!currentMessageObject.isOut() && currentMessageObject.isContentUnread()) {
                 if (currentMessageObject.messageOwner.to_id.channel_id == 0) {
-                    MessagesController.getInstance().markMessageContentAsRead(currentMessageObject.messageOwner);
+                    MessagesController.getInstance().markMessageContentAsRead(currentMessageObject);
                     currentMessageObject.setContentIsRead();
                 }
             }
@@ -247,11 +223,11 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
                 invalidate();
             }
         } else if (buttonState == 2) {
-            FileLoader.getInstance().loadFile(currentMessageObject.messageOwner.media.audio, true);
-            buttonState = 3;
+            FileLoader.getInstance().loadFile(currentMessageObject.getDocument(), true, false);
+            buttonState = 4;
             invalidate();
         } else if (buttonState == 3) {
-            FileLoader.getInstance().cancelLoadFile(currentMessageObject.messageOwner.media.audio);
+            FileLoader.getInstance().cancelLoadFile(currentMessageObject.getDocument());
             buttonState = 2;
             invalidate();
         }
@@ -266,9 +242,15 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
             seekBar.setProgress(currentMessageObject.audioProgress);
         }
 
-        int duration;
+        int duration = 0;
         if (!MediaController.getInstance().isPlayingAudio(currentMessageObject)) {
-            duration = currentMessageObject.messageOwner.media.audio.duration;
+            for (int a = 0; a < currentMessageObject.getDocument().attributes.size(); a++) {
+                TLRPC.DocumentAttribute attribute = currentMessageObject.getDocument().attributes.get(a);
+                if (attribute instanceof TLRPC.TL_documentAttributeAudio) {
+                    duration = attribute.duration;
+                    break;
+                }
+            }
         } else {
             duration = currentMessageObject.audioProgressSec;
         }
@@ -282,7 +264,7 @@ public class PopupAudioView extends BaseCell implements SeekBar.SeekBarDelegate,
 
     public void downloadAudioIfNeed() {
         if (buttonState == 2) {
-            FileLoader.getInstance().loadFile(currentMessageObject.messageOwner.media.audio, true);
+            FileLoader.getInstance().loadFile(currentMessageObject.getDocument(), true, false);
             buttonState = 3;
             invalidate();
         }

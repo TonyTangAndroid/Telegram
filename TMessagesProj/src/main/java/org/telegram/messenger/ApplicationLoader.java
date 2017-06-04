@@ -3,11 +3,12 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.messenger;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.Application;
@@ -20,9 +21,6 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.res.Configuration;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.Drawable;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -30,7 +28,6 @@ import android.util.Base64;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
-import com.google.android.gms.gcm.GoogleCloudMessaging;
 
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.SerializedData;
@@ -39,89 +36,18 @@ import org.telegram.ui.Components.ForegroundDetector;
 
 import java.io.File;
 import java.io.RandomAccessFile;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ApplicationLoader extends Application {
 
-    private GoogleCloudMessaging gcm;
-    private AtomicInteger msgId = new AtomicInteger();
-    private String regid;
-    public static final String EXTRA_MESSAGE = "message";
-    public static final String PROPERTY_REG_ID = "registration_id";
-    private static final String PROPERTY_APP_VERSION = "appVersion";
-    private static final int PLAY_SERVICES_RESOLUTION_REQUEST = 9000;
-    private static Drawable cachedWallpaper;
-    private static int selectedColor;
-    private static boolean isCustomTheme;
-    private static final Object sync = new Object();
-
+    @SuppressLint("StaticFieldLeak")
     public static volatile Context applicationContext;
     public static volatile Handler applicationHandler;
     private static volatile boolean applicationInited = false;
 
     public static volatile boolean isScreenOn = false;
     public static volatile boolean mainInterfacePaused = true;
-
-    public static boolean isCustomTheme() {
-        return isCustomTheme;
-    }
-
-    public static int getSelectedColor() {
-        return selectedColor;
-    }
-
-    public static void reloadWallpaper() {
-        cachedWallpaper = null;
-        loadWallpaper();
-    }
-
-    public static void loadWallpaper() {
-        if (cachedWallpaper != null) {
-            return;
-        }
-        Utilities.searchQueue.postRunnable(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (sync) {
-                    int selectedColor = 0;
-                    try {
-                        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE);
-                        int selectedBackground = preferences.getInt("selectedBackground", 1000001);
-                        selectedColor = preferences.getInt("selectedColor", 0);
-                        if (selectedColor == 0) {
-                            if (selectedBackground == 1000001) {
-                                cachedWallpaper = applicationContext.getResources().getDrawable(R.drawable.background_hd);
-                                isCustomTheme = false;
-                            } else {
-                                File toFile = new File(getFilesDirFixed(), "wallpaper.jpg");
-                                if (toFile.exists()) {
-                                    cachedWallpaper = Drawable.createFromPath(toFile.getAbsolutePath());
-                                    isCustomTheme = true;
-                                } else {
-                                    cachedWallpaper = applicationContext.getResources().getDrawable(R.drawable.background_hd);
-                                    isCustomTheme = false;
-                                }
-                            }
-                        }
-                    } catch (Throwable throwable) {
-                        //ignore
-                    }
-                    if (cachedWallpaper == null) {
-                        if (selectedColor == 0) {
-                            selectedColor = -2693905;
-                        }
-                        cachedWallpaper = new ColorDrawable(selectedColor);
-                    }
-                }
-            }
-        });
-    }
-
-    public static Drawable getCachedWallpaper() {
-        synchronized (sync) {
-            return cachedWallpaper;
-        }
-    }
+    public static volatile boolean mainInterfacePausedStageQueue = true;
+    public static volatile long mainInterfacePausedStageQueueTime;
 
     private static void convertConfig() {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("dataconfig", Context.MODE_PRIVATE);
@@ -148,7 +74,7 @@ public class ApplicationLoader extends Application {
                     }
                 }
             } catch (Exception e) {
-                FileLog.e("tmessages", e);
+                FileLog.e(e);
             }
 
             try {
@@ -159,7 +85,7 @@ public class ApplicationLoader extends Application {
                 fileOutputStream.write(bytes);
                 fileOutputStream.close();
             } catch (Exception e) {
-                FileLog.e("tmessages", e);
+                FileLog.e(e);
             }
             buffer.cleanup();
             preferences.edit().clear().commit();
@@ -179,7 +105,7 @@ public class ApplicationLoader extends Application {
             path.mkdirs();
             return path;
         } catch (Exception e) {
-            FileLog.e("tmessages", e);
+            FileLog.e(e);
         }
         return new File("/data/data/org.telegram.messenger/files");
     }
@@ -210,9 +136,9 @@ public class ApplicationLoader extends Application {
         try {
             PowerManager pm = (PowerManager)ApplicationLoader.applicationContext.getSystemService(Context.POWER_SERVICE);
             isScreenOn = pm.isScreenOn();
-            FileLog.e("tmessages", "screen state = " + isScreenOn);
+            FileLog.e("screen state = " + isScreenOn);
         } catch (Exception e) {
-            FileLog.e("tmessages", e);
+            FileLog.e(e);
         }
 
         UserConfig.loadConfig();
@@ -223,7 +149,7 @@ public class ApplicationLoader extends Application {
         String configPath = getFilesDirFixed().toString();
 
         try {
-            langCode = LocaleController.getLocaleString(LocaleController.getInstance().getSystemDefaultLocale());
+            langCode = LocaleController.getLocaleStringIso639();
             deviceModel = Build.MANUFACTURER + Build.MODEL;
             PackageInfo pInfo = ApplicationLoader.applicationContext.getPackageManager().getPackageInfo(ApplicationLoader.applicationContext.getPackageName(), 0);
             appVersion = pInfo.versionName + " (" + pInfo.versionCode + ")";
@@ -247,8 +173,11 @@ public class ApplicationLoader extends Application {
             systemVersion = "SDK Unknown";
         }
 
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("Notifications", Activity.MODE_PRIVATE);
+        boolean enablePushConnection = preferences.getBoolean("pushConnection", true);
+
         MessagesController.getInstance();
-        ConnectionsManager.getInstance().init(BuildVars.BUILD_VERSION, TLRPC.LAYER, BuildVars.APP_ID, deviceModel, systemVersion, appVersion, langCode, configPath, FileLog.getNetworkLogPath(), UserConfig.getClientUserId());
+        ConnectionsManager.getInstance().init(BuildVars.BUILD_VERSION, TLRPC.LAYER, BuildVars.APP_ID, deviceModel, systemVersion, appVersion, langCode, configPath, FileLog.getNetworkLogPath(), UserConfig.getClientUserId(), enablePushConnection);
         if (UserConfig.getCurrentUser() != null) {
             MessagesController.getInstance().putUser(UserConfig.getCurrentUser(), true);
             ConnectionsManager.getInstance().applyCountryPortNumber(UserConfig.getCurrentUser().phone);
@@ -258,7 +187,7 @@ public class ApplicationLoader extends Application {
 
         ApplicationLoader app = (ApplicationLoader)ApplicationLoader.applicationContext;
         app.initPlayServices();
-        FileLog.e("tmessages", "app initied");
+        FileLog.e("app initied");
 
         ContactsController.getInstance().checkAppAccount();
         MediaController.getInstance();
@@ -268,40 +197,40 @@ public class ApplicationLoader extends Application {
     public void onCreate() {
         super.onCreate();
 
-        if (Build.VERSION.SDK_INT < 11) {
-            java.lang.System.setProperty("java.net.preferIPv4Stack", "true");
-            java.lang.System.setProperty("java.net.preferIPv6Addresses", "false");
-        }
-
         applicationContext = getApplicationContext();
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
         ConnectionsManager.native_setJava(Build.VERSION.SDK_INT == 14 || Build.VERSION.SDK_INT == 15);
-
-        if (Build.VERSION.SDK_INT >= 14) {
-            new ForegroundDetector(this);
-        }
+        new ForegroundDetector(this);
 
         applicationHandler = new Handler(applicationContext.getMainLooper());
 
         startPushService();
     }
 
+    /*public static void sendRegIdToBackend(final String token) {
+        Utilities.stageQueue.postRunnable(new Runnable() {
+            @Override
+            public void run() {
+                UserConfig.pushString = token;
+                UserConfig.registeredForPush = false;
+                UserConfig.saveConfig(false);
+                if (UserConfig.getClientUserId() != 0) {
+                    AndroidUtilities.runOnUIThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            MessagesController.getInstance().registerForPush(token);
+                        }
+                    });
+                }
+            }
+        });
+    }*/
+
     public static void startPushService() {
         SharedPreferences preferences = applicationContext.getSharedPreferences("Notifications", MODE_PRIVATE);
 
         if (preferences.getBoolean("pushService", true)) {
             applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
-
-            if (android.os.Build.VERSION.SDK_INT >= 19) {
-//                Calendar cal = Calendar.getInstance();
-//                PendingIntent pintent = PendingIntent.getService(applicationContext, 0, new Intent(applicationContext, NotificationsService.class), 0);
-//                AlarmManager alarm = (AlarmManager) applicationContext.getSystemService(Context.ALARM_SERVICE);
-//                alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), 30000, pintent);
-
-                PendingIntent pintent = PendingIntent.getService(applicationContext, 0, new Intent(applicationContext, NotificationsService.class), 0);
-                AlarmManager alarm = (AlarmManager)applicationContext.getSystemService(Context.ALARM_SERVICE);
-                alarm.cancel(pintent);
-            }
         } else {
             stopPushService();
         }
@@ -320,7 +249,7 @@ public class ApplicationLoader extends Application {
         super.onConfigurationChanged(newConfig);
         try {
             LocaleController.getInstance().onDeviceConfigurationChange(newConfig);
-            AndroidUtilities.checkDisplaySize();
+            AndroidUtilities.checkDisplaySize(applicationContext, newConfig);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -331,24 +260,61 @@ public class ApplicationLoader extends Application {
             @Override
             public void run() {
                 if (checkPlayServices()) {
-                    gcm = GoogleCloudMessaging.getInstance(ApplicationLoader.this);
-                    regid = getRegistrationId();
-
-                    if (regid.length() == 0) {
-                        registerInBackground();
+                    if (UserConfig.pushString != null && UserConfig.pushString.length() != 0) {
+                        FileLog.d("GCM regId = " + UserConfig.pushString);
                     } else {
-                        sendRegistrationIdToBackend(false);
+                        FileLog.d("GCM Registration not found.");
                     }
+
+                    //if (UserConfig.pushString == null || UserConfig.pushString.length() == 0) {
+                    Intent intent = new Intent(applicationContext, GcmRegistrationIntentService.class);
+                    startService(intent);
+                    //} else {
+                    //    FileLog.d("GCM regId = " + UserConfig.pushString);
+                    //}
                 } else {
-                    FileLog.d("tmessages", "No valid Google Play Services APK found.");
+                    FileLog.d("No valid Google Play Services APK found.");
                 }
             }
         }, 1000);
     }
 
+    /*private void initPlayServices() {
+        AndroidUtilities.runOnUIThread(new Runnable() {
+            @Override
+            public void run() {
+                if (checkPlayServices()) {
+                    if (UserConfig.pushString != null && UserConfig.pushString.length() != 0) {
+                        FileLog.d("GCM regId = " + UserConfig.pushString);
+                    } else {
+                        FileLog.d("GCM Registration not found.");
+                    }
+                    try {
+                        if (!FirebaseApp.getApps(ApplicationLoader.applicationContext).isEmpty()) {
+                            String token = FirebaseInstanceId.getInstance().getToken();
+                            if (token != null) {
+                                sendRegIdToBackend(token);
+                            }
+                        }
+                    } catch (Throwable e) {
+                        FileLog.e(e);
+                    }
+                } else {
+                    FileLog.d("No valid Google Play Services APK found.");
+                }
+            }
+        }, 2000);
+    }*/
+
     private boolean checkPlayServices() {
-        int resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
-        return resultCode == ConnectionResult.SUCCESS;
+        try {
+            int resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
+            return resultCode == ConnectionResult.SUCCESS;
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        return true;
+
         /*if (resultCode != ConnectionResult.SUCCESS) {
             if (GooglePlayServicesUtil.isUserRecoverableError(resultCode)) {
                 GooglePlayServicesUtil.getErrorDialog(resultCode, this, PLAY_SERVICES_RESOLUTION_REQUEST).show();
@@ -358,92 +324,5 @@ public class ApplicationLoader extends Application {
             return false;
         }
         return true;*/
-    }
-
-    private String getRegistrationId() {
-        final SharedPreferences prefs = getGCMPreferences(applicationContext);
-        String registrationId = prefs.getString(PROPERTY_REG_ID, "");
-        if (registrationId.length() == 0) {
-            FileLog.d("tmessages", "Registration not found.");
-            return "";
-        }
-        int registeredVersion = prefs.getInt(PROPERTY_APP_VERSION, Integer.MIN_VALUE);
-        if (registeredVersion != BuildVars.BUILD_VERSION) {
-            FileLog.d("tmessages", "App version changed.");
-            return "";
-        }
-        return registrationId;
-    }
-
-    private SharedPreferences getGCMPreferences(Context context) {
-        return getSharedPreferences(ApplicationLoader.class.getSimpleName(), Context.MODE_PRIVATE);
-    }
-
-    private void registerInBackground() {
-        AsyncTask<String, String, Boolean> task = new AsyncTask<String, String, Boolean>() {
-            @Override
-            protected Boolean doInBackground(String... objects) {
-                if (gcm == null) {
-                    gcm = GoogleCloudMessaging.getInstance(applicationContext);
-                }
-                int count = 0;
-                while (count < 1000) {
-                    try {
-                        count++;
-                        regid = gcm.register(BuildVars.GCM_SENDER_ID);
-                        sendRegistrationIdToBackend(true);
-                        storeRegistrationId(applicationContext, regid);
-                        return true;
-                    } catch (Exception e) {
-                        FileLog.e("tmessages", e);
-                    }
-                    try {
-                        if (count % 20 == 0) {
-                            Thread.sleep(60000 * 30);
-                        } else {
-                            Thread.sleep(5000);
-                        }
-                    } catch (InterruptedException e) {
-                        FileLog.e("tmessages", e);
-                    }
-                }
-                return false;
-            }
-        };
-
-        if (android.os.Build.VERSION.SDK_INT >= 11) {
-            task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, null, null, null);
-        } else {
-            task.execute(null, null, null);
-        }
-    }
-
-    private void sendRegistrationIdToBackend(final boolean isNew) {
-        Utilities.stageQueue.postRunnable(new Runnable() {
-            @Override
-            public void run() {
-                UserConfig.pushString = regid;
-                UserConfig.registeredForPush = !isNew;
-                UserConfig.saveConfig(false);
-                if (UserConfig.getClientUserId() != 0) {
-                    AndroidUtilities.runOnUIThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            MessagesController.getInstance().registerForPush(regid);
-                        }
-                    });
-                }
-            }
-        });
-    }
-
-    private void storeRegistrationId(Context context, String regId) {
-        final SharedPreferences prefs = getGCMPreferences(context);
-        int appVersion = BuildVars.BUILD_VERSION;
-        FileLog.e("tmessages", "Saving regId on app version " + appVersion);
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.putString(PROPERTY_REG_ID, regId);
-        editor.putInt(PROPERTY_APP_VERSION, appVersion);
-        editor.commit();
     }
 }

@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 //Thanks to https://github.com/JakeWharton/ActionBarSherlock/
@@ -15,6 +15,8 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.KeyEvent;
@@ -38,9 +40,10 @@ import java.util.HashMap;
 public class ActionBarPopupWindow extends PopupWindow {
 
     private static final Field superListenerField;
-    private static final boolean animationEnabled = Build.VERSION.SDK_INT >= 18;
+    private static final boolean allowAnimation = Build.VERSION.SDK_INT >= 18;
     private static DecelerateInterpolator decelerateInterpolator = new DecelerateInterpolator();
     private AnimatorSet windowAnimatorSet;
+    private boolean animationEnabled = allowAnimation;
     static {
         Field f = null;
         try {
@@ -69,23 +72,23 @@ public class ActionBarPopupWindow extends PopupWindow {
     public static class ActionBarPopupWindowLayout extends FrameLayout {
 
         private OnDispatchKeyEventListener mOnDispatchKeyEventListener;
-        protected static Drawable backgroundDrawable;
+        protected Drawable backgroundDrawable;
         private float backScaleX = 1;
         private float backScaleY = 1;
         private int backAlpha = 255;
         private int lastStartedChild = 0;
         private boolean showedFromBotton;
+        private boolean animationEnabled = allowAnimation;
         private HashMap<View, Integer> positions = new HashMap<>();
 
         private ScrollView scrollView;
-        private LinearLayout linearLayout;
+        protected LinearLayout linearLayout;
 
         public ActionBarPopupWindowLayout(Context context) {
             super(context);
 
-            if (backgroundDrawable == null) {
-                backgroundDrawable = getResources().getDrawable(R.drawable.popup_fixed);
-            }
+            backgroundDrawable = getResources().getDrawable(R.drawable.popup_fixed).mutate();
+            backgroundDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground), PorterDuff.Mode.MULTIPLY));
 
             setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
             setWillNotDraw(false);
@@ -95,7 +98,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                 scrollView.setVerticalScrollBarEnabled(false);
                 addView(scrollView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
             } catch (Throwable e) {
-                FileLog.e("tmessages", e);
+                FileLog.e(e);
             }
 
 
@@ -181,9 +184,17 @@ public class ActionBarPopupWindow extends PopupWindow {
             }
         }
 
+        public void setAnimationEnabled(boolean value) {
+            animationEnabled = value;
+        }
+
         @Override
         public void addView(View child) {
             linearLayout.addView(child);
+        }
+
+        public void removeInnerViews() {
+            linearLayout.removeAllViews();
         }
 
         public float getBackScaleX() {
@@ -206,6 +217,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         protected void onDraw(Canvas canvas) {
             if (backgroundDrawable != null) {
                 backgroundDrawable.setAlpha(backAlpha);
+                int height = getMeasuredHeight();
                 if (showedFromBotton) {
                     backgroundDrawable.setBounds(0, (int) (getMeasuredHeight() * (1.0f - backScaleY)), (int) (getMeasuredWidth() * backScaleX), getMeasuredHeight());
                 } else {
@@ -260,6 +272,10 @@ public class ActionBarPopupWindow extends PopupWindow {
         init();
     }
 
+    public void setAnimationEnabled(boolean value) {
+        animationEnabled = value;
+    }
+
     private void init() {
         if (superListenerField != null) {
             try {
@@ -300,7 +316,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             super.showAsDropDown(anchor, xoff, yoff);
             registerListener(anchor);
         } catch (Exception e) {
-            FileLog.e("tmessages", e);
+            FileLog.e(e);
         }
     }
 

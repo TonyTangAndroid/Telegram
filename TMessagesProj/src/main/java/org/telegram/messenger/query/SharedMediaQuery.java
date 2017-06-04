@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.messenger.query;
@@ -56,11 +56,11 @@ public class SharedMediaQuery {
             } else if (type == MEDIA_FILE) {
                 req.filter = new TLRPC.TL_inputMessagesFilterDocument();
             } else if (type == MEDIA_AUDIO) {
-                req.filter = new TLRPC.TL_inputMessagesFilterAudio();
+                req.filter = new TLRPC.TL_inputMessagesFilterVoice();
             } else if (type == MEDIA_URL) {
                 req.filter = new TLRPC.TL_inputMessagesFilterUrl();
             } else if (type == MEDIA_MUSIC) {
-                req.filter = new TLRPC.TL_inputMessagesFilterAudioDocuments();
+                req.filter = new TLRPC.TL_inputMessagesFilterMusic();
             }
             req.q = "";
             req.peer = MessagesController.getInputPeer(lower_part);
@@ -101,11 +101,11 @@ public class SharedMediaQuery {
             } else if (type == MEDIA_FILE) {
                 req.filter = new TLRPC.TL_inputMessagesFilterDocument();
             } else if (type == MEDIA_AUDIO) {
-                req.filter = new TLRPC.TL_inputMessagesFilterAudio();
+                req.filter = new TLRPC.TL_inputMessagesFilterVoice();
             } else if (type == MEDIA_URL) {
                 req.filter = new TLRPC.TL_inputMessagesFilterUrl();
             } else if (type == MEDIA_MUSIC) {
-                req.filter = new TLRPC.TL_inputMessagesFilterAudioDocuments();
+                req.filter = new TLRPC.TL_inputMessagesFilterMusic();
             }
             req.q = "";
             req.peer = MessagesController.getInputPeer(lower_part);
@@ -144,18 +144,20 @@ public class SharedMediaQuery {
         if (message == null) {
             return -1;
         }
-        if (message.media instanceof TLRPC.TL_messageMediaPhoto || message.media instanceof TLRPC.TL_messageMediaVideo) {
+        if (message.media instanceof TLRPC.TL_messageMediaPhoto) {
             return MEDIA_PHOTOVIDEO;
         } else if (message.media instanceof TLRPC.TL_messageMediaDocument) {
-            if (MessageObject.isStickerMessage(message)) {
+            if (MessageObject.isVoiceMessage(message)) {
+                return MEDIA_AUDIO;
+            } else if (MessageObject.isVideoMessage(message)) {
+                return MEDIA_PHOTOVIDEO;
+            } else if (MessageObject.isStickerMessage(message)) {
                 return -1;
             } else if (MessageObject.isMusicMessage(message)) {
                 return MEDIA_MUSIC;
             } else {
                 return MEDIA_FILE;
             }
-        } else if (message.media instanceof TLRPC.TL_messageMediaAudio) {
-            return MEDIA_AUDIO;
         } else if (!message.entities.isEmpty()) {
             for (int a = 0; a < message.entities.size(); a++) {
                 TLRPC.MessageEntity entity = message.entities.get(a);
@@ -171,9 +173,7 @@ public class SharedMediaQuery {
         if (message instanceof TLRPC.TL_message_secret && message.media instanceof TLRPC.TL_messageMediaPhoto && message.ttl != 0 && message.ttl <= 60) {
             return false;
         } else if (message.media instanceof TLRPC.TL_messageMediaPhoto ||
-                message.media instanceof TLRPC.TL_messageMediaVideo ||
-                message.media instanceof TLRPC.TL_messageMediaDocument ||
-                message.media instanceof TLRPC.TL_messageMediaAudio) {
+                message.media instanceof TLRPC.TL_messageMediaDocument && !MessageObject.isGifDocument(message.media.document)) {
             return true;
         } else if (!message.entities.isEmpty()) {
             for (int a = 0; a < message.entities.size(); a++) {
@@ -250,7 +250,7 @@ public class SharedMediaQuery {
                     state2.step();
                     state2.dispose();
                 } catch (Exception e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
             }
         });
@@ -281,7 +281,7 @@ public class SharedMediaQuery {
                     }
                     processLoadedMediaCount(count, uid, type, classGuid, true);
                 } catch (Exception e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
             }
         });
@@ -375,9 +375,10 @@ public class SharedMediaQuery {
                     }
 
                     while (cursor.next()) {
-                        NativeByteBuffer data = new NativeByteBuffer(cursor.byteArrayLength(0));
-                        if (data != null && cursor.byteBufferValue(0, data) != 0) {
+                        NativeByteBuffer data = cursor.byteBufferValue(0);
+                        if (data != null) {
                             TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                            data.reuse();
                             message.id = cursor.intValue(1);
                             message.dialog_id = uid;
                             if ((int) uid == 0) {
@@ -394,7 +395,6 @@ public class SharedMediaQuery {
                                 }
                             }
                         }
-                        data.reuse();
                     }
                     cursor.dispose();
 
@@ -414,7 +414,7 @@ public class SharedMediaQuery {
                     res.messages.clear();
                     res.chats.clear();
                     res.users.clear();
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 } finally {
                     processLoadedMedia(res, uid, offset, count, max_id, type, true, classGuid, isChannel, topReached);
                 }
@@ -466,7 +466,7 @@ public class SharedMediaQuery {
                     }
                     MessagesStorage.getInstance().getDatabase().commitTransaction();
                 } catch (Exception e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
             }
         });
@@ -481,20 +481,20 @@ public class SharedMediaQuery {
                     SQLiteCursor cursor = MessagesStorage.getInstance().getDatabase().queryFinalized(String.format(Locale.US, "SELECT data, mid FROM media_v2 WHERE uid = %d AND mid < %d AND type = %d ORDER BY date DESC, mid DESC LIMIT 1000", uid, max_id, MEDIA_MUSIC));
 
                     while (cursor.next()) {
-                        NativeByteBuffer data = new NativeByteBuffer(cursor.byteArrayLength(0));
-                        if (data != null && cursor.byteBufferValue(0, data) != 0) {
+                        NativeByteBuffer data = cursor.byteBufferValue(0);
+                        if (data != null) {
                             TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                            data.reuse();
                             if (MessageObject.isMusicMessage(message)) {
                                 message.id = cursor.intValue(1);
                                 message.dialog_id = uid;
                                 arrayList.add(0, new MessageObject(message, null, false));
                             }
                         }
-                        data.reuse();
                     }
                     cursor.dispose();
                 } catch (Exception e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
                 AndroidUtilities.runOnUIThread(new Runnable() {
                     @Override

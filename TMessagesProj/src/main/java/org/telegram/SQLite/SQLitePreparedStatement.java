@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.SQLite;
@@ -12,16 +12,14 @@ import org.telegram.messenger.FileLog;
 import org.telegram.tgnet.NativeByteBuffer;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 
 public class SQLitePreparedStatement {
+
 	private boolean isFinalized = false;
 	private int sqliteStatementHandle;
-
-	private int queryArgsCount;
 	private boolean finalizeAfterQuery = false;
 
-    private static HashMap<SQLitePreparedStatement, String> hashMap;
+    //private static HashMap<SQLitePreparedStatement, String> hashMap;
 
 	public int getStatementHandle() {
 		return sqliteStatementHandle;
@@ -36,14 +34,14 @@ public class SQLitePreparedStatement {
             }
             hashMap.put(this, sql);
             for (HashMap.Entry<SQLitePreparedStatement, String> entry : hashMap.entrySet()) {
-                FileLog.d("tmessages", "exist entry = " + entry.getValue());
+                FileLog.d("exist entry = " + entry.getValue());
             }
         }*/
 	}
 
 
     public SQLiteCursor query(Object[] args) throws SQLiteException {
-        if (args == null || args.length != queryArgsCount) {
+        if (args == null) {
             throw new IllegalArgumentException();
         }
 
@@ -107,7 +105,7 @@ public class SQLitePreparedStatement {
 			isFinalized = true;
 			finalize(sqliteStatementHandle);
 		} catch (SQLiteException e) {
-            FileLog.e("tmessages", e.getMessage(), e);
+            FileLog.e(e.getMessage(), e);
 		}
 	}
 
@@ -133,6 +131,10 @@ public class SQLitePreparedStatement {
 
     public void bindLong(int index, long value) throws SQLiteException {
         bindLong(sqliteStatementHandle, index, value);
+    }
+
+    public void bindNull(int index) throws SQLiteException {
+        bindNull(sqliteStatementHandle, index);
     }
 
 	native void bindByteBuffer(int statementHandle, int index, ByteBuffer value, int length) throws SQLiteException;

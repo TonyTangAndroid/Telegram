@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui;
@@ -14,6 +14,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.database.DataSetObserver;
+import android.graphics.Shader;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcelable;
@@ -28,10 +30,11 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.BuildConfig;
+import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.tgnet.ConnectionsManager;
+import org.telegram.ui.ActionBar.Theme;
 
 public class IntroActivity extends Activity {
 
@@ -54,6 +57,10 @@ public class IntroActivity extends Activity {
 
         if (AndroidUtilities.isTablet()) {
             setContentView(R.layout.intro_layout_tablet);
+            View imageView = findViewById(R.id.background_image_intro);
+            BitmapDrawable drawable = (BitmapDrawable) getResources().getDrawable(R.drawable.catstile);
+            drawable.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+            imageView.setBackgroundDrawable(drawable);
         } else {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setContentView(R.layout.intro_layout);
@@ -165,7 +172,6 @@ public class IntroActivity extends Activity {
                         fadeinImage.clearAnimation();
                         fadeoutImage.clearAnimation();
 
-
                         Animation outAnimation = AnimationUtils.loadAnimation(IntroActivity.this, R.anim.icon_anim_fade_out);
                         outAnimation.setAnimationListener(new Animation.AnimationListener() {
                             @Override
@@ -221,7 +227,7 @@ public class IntroActivity extends Activity {
                 finish();
             }
         });
-        if (BuildConfig.DEBUG) {
+        if (BuildVars.DEBUG_VERSION) {
             startMessagingButton.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override
                 public boolean onLongClick(View v) {

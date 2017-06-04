@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Components;
@@ -20,10 +20,11 @@ import android.text.TextPaint;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
+import org.telegram.ui.ActionBar.Theme;
 
 public class LetterDrawable extends Drawable {
 
-    private static Paint paint = new Paint();
+    public static Paint paint = new Paint();
     private static TextPaint namePaint;
 
     private StaticLayout textLayout;
@@ -36,11 +37,19 @@ public class LetterDrawable extends Drawable {
         super();
 
         if (namePaint == null) {
-            paint.setColor(0xffdfdfdf);
+            paint.setColor(Theme.getColor(Theme.key_sharedMedia_linkPlaceholder));
             namePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-            namePaint.setColor(0xffffffff);
-            namePaint.setTextSize(AndroidUtilities.dp(28));
+            namePaint.setColor(Theme.getColor(Theme.key_sharedMedia_linkPlaceholderText));
         }
+        namePaint.setTextSize(AndroidUtilities.dp(28));
+    }
+
+    public void setBackgroundColor(int value) {
+        paint.setColor(value);
+    }
+
+    public void setColor(int value) {
+        namePaint.setColor(value);
     }
 
     public void setTitle(String title) {
@@ -59,7 +68,7 @@ public class LetterDrawable extends Drawable {
                     textHeight = textLayout.getLineBottom(0);
                 }
             } catch (Exception e) {
-                FileLog.e("tmessages", e);
+                FileLog.e(e);
             }
         } else {
             textLayout = null;

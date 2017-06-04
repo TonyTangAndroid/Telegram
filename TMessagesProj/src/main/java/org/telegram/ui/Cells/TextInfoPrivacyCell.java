@@ -3,11 +3,13 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Cells;
 
+import android.animation.Animator;
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.text.method.LinkMovementMethod;
 import android.util.TypedValue;
@@ -18,6 +20,9 @@ import android.widget.TextView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.ActionBar.Theme;
+
+import java.util.ArrayList;
 
 public class TextInfoPrivacyCell extends FrameLayout {
 
@@ -27,8 +32,8 @@ public class TextInfoPrivacyCell extends FrameLayout {
         super(context);
 
         textView = new TextView(context);
-        textView.setTextColor(0xff808080);
-        textView.setLinkTextColor(0xff316f9f);
+        textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText4));
+        textView.setLinkTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteLinkText));
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         textView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
         textView.setPadding(0, AndroidUtilities.dp(10), 0, AndroidUtilities.dp(17));
@@ -38,14 +43,31 @@ public class TextInfoPrivacyCell extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+        super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
     }
 
     public void setText(CharSequence text) {
+        if (text == null) {
+            textView.setPadding(0, AndroidUtilities.dp(2), 0, 0);
+        } else {
+            textView.setPadding(0, AndroidUtilities.dp(10), 0, AndroidUtilities.dp(17));
+        }
         textView.setText(text);
     }
 
     public void setTextColor(int color) {
         textView.setTextColor(color);
+    }
+
+    public TextView getTextView() {
+        return textView;
+    }
+
+    public void setEnabled(boolean value, ArrayList<Animator> animators) {
+        if (animators != null) {
+            animators.add(ObjectAnimator.ofFloat(textView, "alpha", value ? 1.0f : 0.5f));
+        } else {
+            textView.setAlpha(value ? 1.0f : 0.5f);
+        }
     }
 }

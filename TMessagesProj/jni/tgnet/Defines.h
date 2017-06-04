@@ -21,6 +21,18 @@
 #define DEFAULT_DATACENTER_ID INT_MAX
 #define DC_UPDATE_TIME 60 * 60
 #define DOWNLOAD_CONNECTIONS_COUNT 2
+#define UPLOAD_CONNECTIONS_COUNT 2
+#define CONNECTION_BACKGROUND_KEEP_TIME 10000
+
+#define DOWNLOAD_CHUNK_SIZE 1024 * 32
+#define DOWNLOAD_CHUNK_BIG_SIZE 1024 * 128
+#define DOWNLOAD_MAX_REQUESTS 4
+#define DOWNLOAD_MAX_BIG_REQUESTS 4
+#define DOWNLOAD_BIG_FILE_MIN_SIZE 1024 * 1024
+
+#define NETWORK_TYPE_MOBILE 0
+#define NETWORK_TYPE_WIFI 1
+#define NETWORK_TYPE_ROAMING 2
 
 class TLObject;
 class TL_error;
@@ -28,8 +40,9 @@ class Request;
 class TL_message;
 class TL_config;
 class NativeByteBuffer;
+class FileLoadOperation;
 
-typedef std::function<void(TLObject *response, TL_error *error)> onCompleteFunc;
+typedef std::function<void(TLObject *response, TL_error *error, int32_t networkType)> onCompleteFunc;
 typedef std::function<void()> onQuickAckFunc;
 typedef std::list<std::unique_ptr<Request>> requestsList;
 typedef requestsList::iterator requestsIter;
@@ -57,8 +70,26 @@ enum ConnectionState {
 enum EventObjectType {
     EventObjectTypeConnection,
     EventObjectTypeTimer,
-    EventObjectPipe
+    EventObjectTypePipe,
+    EventObjectTypeEvent
 };
+
+enum FileLoadState {
+    FileLoadStateIdle,
+    FileLoadStateDownloading,
+    FileLoadStateFailed,
+    FileLoadStateFinished
+};
+
+enum FileLoadFailReason {
+    FileLoadFailReasonError,
+    FileLoadFailReasonCanceled,
+    FileLoadFailReasonRetryLimit
+};
+
+typedef std::function<void(std::string path)> onFinishedFunc;
+typedef std::function<void(FileLoadFailReason reason)> onFailedFunc;
+typedef std::function<void(float progress)> onProgressChangedFunc;
 
 typedef struct ConnectiosManagerDelegate {
     virtual void onUpdate() = 0;
@@ -68,6 +99,8 @@ typedef struct ConnectiosManagerDelegate {
     virtual void onLogout() = 0;
     virtual void onUpdateConfig(TL_config *config) = 0;
     virtual void onInternalPushReceived() = 0;
+    virtual void onBytesSent(int32_t amount, int32_t networkType) = 0;
+    virtual void onBytesReceived(int32_t amount, int32_t networkType) = 0;
 } ConnectiosManagerDelegate;
 
 #define AllConnectionTypes ConnectionTypeGeneric | ConnectionTypeDownload | ConnectionTypeUpload

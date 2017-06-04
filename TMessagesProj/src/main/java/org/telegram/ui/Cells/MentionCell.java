@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Cells;
@@ -16,8 +16,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.Emoji;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.LayoutHelper;
@@ -35,14 +37,14 @@ public class MentionCell extends LinearLayout {
         setOrientation(HORIZONTAL);
 
         avatarDrawable = new AvatarDrawable();
-        avatarDrawable.setSmallStyle(true);
+        avatarDrawable.setTextSize(AndroidUtilities.dp(12));
 
         imageView = new BackupImageView(context);
         imageView.setRoundRadius(AndroidUtilities.dp(14));
         addView(imageView, LayoutHelper.createLinear(28, 28, 12, 4, 0, 0));
 
         nameTextView = new TextView(context);
-        nameTextView.setTextColor(0xff000000);
+        nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         nameTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         nameTextView.setSingleLine(true);
         nameTextView.setGravity(Gravity.LEFT);
@@ -50,7 +52,7 @@ public class MentionCell extends LinearLayout {
         addView(nameTextView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 12, 0, 0, 0));
 
         usernameTextView = new TextView(context);
-        usernameTextView.setTextColor(0xff999999);
+        usernameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
         usernameTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         usernameTextView.setSingleLine(true);
         usernameTextView.setGravity(Gravity.LEFT);
@@ -60,7 +62,7 @@ public class MentionCell extends LinearLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(36), MeasureSpec.EXACTLY));
+        super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(36), MeasureSpec.EXACTLY));
     }
 
     public void setUser(TLRPC.User user) {
@@ -77,7 +79,11 @@ public class MentionCell extends LinearLayout {
             imageView.setImageDrawable(avatarDrawable);
         }
         nameTextView.setText(UserObject.getUserName(user));
-        usernameTextView.setText("@" + user.username);
+        if (user.username != null) {
+            usernameTextView.setText("@" + user.username);
+        } else {
+            usernameTextView.setText("");
+        }
         imageView.setVisibility(VISIBLE);
         usernameTextView.setVisibility(VISIBLE);
     }
@@ -102,7 +108,7 @@ public class MentionCell extends LinearLayout {
         }
         usernameTextView.setVisibility(VISIBLE);
         nameTextView.setText(command);
-        usernameTextView.setText(help);
+        usernameTextView.setText(Emoji.replaceEmoji(help, usernameTextView.getPaint().getFontMetricsInt(), AndroidUtilities.dp(20), false));
     }
 
     public void setIsDarkTheme(boolean isDarkTheme) {
@@ -110,8 +116,8 @@ public class MentionCell extends LinearLayout {
             nameTextView.setTextColor(0xffffffff);
             usernameTextView.setTextColor(0xff999999);
         } else {
-            nameTextView.setTextColor(0xff000000);
-            usernameTextView.setTextColor(0xff999999);
+            nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            usernameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
         }
     }
 }

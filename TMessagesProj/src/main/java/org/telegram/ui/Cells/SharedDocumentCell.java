@@ -3,14 +3,15 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Cells;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -28,6 +29,7 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.R;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.CheckBox;
 import org.telegram.ui.Components.LayoutHelper;
@@ -38,7 +40,7 @@ import java.util.Date;
 
 public class SharedDocumentCell extends FrameLayout implements MediaController.FileDownloadProgressListener {
 
-    private ImageView placeholderImabeView;
+    private ImageView placeholderImageView;
     private BackupImageView thumbImageView;
     private TextView nameTextView;
     private TextView extTextView;
@@ -48,8 +50,6 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
     private CheckBox checkBox;
 
     private boolean needDivider;
-
-    private static Paint paint;
 
     private int TAG;
 
@@ -67,19 +67,13 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
     public SharedDocumentCell(Context context) {
         super(context);
 
-        if (paint == null) {
-            paint = new Paint();
-            paint.setColor(0xffd9d9d9);
-            paint.setStrokeWidth(1);
-        }
-
         TAG = MediaController.getInstance().generateObserverTag();
 
-        placeholderImabeView = new ImageView(context);
-        addView(placeholderImabeView, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 12, 8, LocaleController.isRTL ? 12 : 0, 0));
+        placeholderImageView = new ImageView(context);
+        addView(placeholderImageView, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 12, 8, LocaleController.isRTL ? 12 : 0, 0));
 
         extTextView = new TextView(context);
-        extTextView.setTextColor(0xffffffff);
+        extTextView.setTextColor(Theme.getColor(Theme.key_files_iconText));
         extTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         extTextView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
         extTextView.setLines(1);
@@ -95,12 +89,12 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
             @Override
             public void didSetImage(ImageReceiver imageReceiver, boolean set, boolean thumb) {
                 extTextView.setVisibility(set ? INVISIBLE : VISIBLE);
-                placeholderImabeView.setVisibility(set ? INVISIBLE : VISIBLE);
+                placeholderImageView.setVisibility(set ? INVISIBLE : VISIBLE);
             }
         });
 
         nameTextView = new TextView(context);
-        nameTextView.setTextColor(0xff212121);
+        nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         nameTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         nameTextView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
         nameTextView.setLines(1);
@@ -112,10 +106,11 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
 
         statusImageView = new ImageView(context);
         statusImageView.setVisibility(INVISIBLE);
+        statusImageView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_sharedMedia_startStopLoadIcon), PorterDuff.Mode.MULTIPLY));
         addView(statusImageView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 8 : 72, 35, LocaleController.isRTL ? 72 : 8, 0));
 
         dateTextView = new TextView(context);
-        dateTextView.setTextColor(0xff999999);
+        dateTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
         dateTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         dateTextView.setLines(1);
         dateTextView.setMaxLines(1);
@@ -125,10 +120,12 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
         addView(dateTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 8 : 72, 30, LocaleController.isRTL ? 72 : 8, 0));
 
         progressView = new LineProgressView(context);
+        progressView.setProgressColor(Theme.getColor(Theme.key_sharedMedia_startStopLoadIcon));
         addView(progressView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 2, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 72, 54, LocaleController.isRTL ? 72 : 0, 0));
 
         checkBox = new CheckBox(context, R.drawable.round_check2);
         checkBox.setVisibility(INVISIBLE);
+        checkBox.setColor(Theme.getColor(Theme.key_checkbox), Theme.getColor(Theme.key_checkboxCheck));
         addView(checkBox, LayoutHelper.createFrame(22, 22, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 34, 30, LocaleController.isRTL ? 34 : 0, 0));
     }
 
@@ -146,7 +143,7 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
             }
             if (color == -1) {
                 int idx;
-                String ext = (idx = name.lastIndexOf(".")) == -1 ? "" : name.substring(idx + 1);
+                String ext = (idx = name.lastIndexOf('.')) == -1 ? "" : name.substring(idx + 1);
                 if (ext.length() != 0) {
                     color = ext.charAt(0) % icons.length;
                 } else {
@@ -168,19 +165,23 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
             extTextView.setVisibility(INVISIBLE);
         }
         if (resId == 0) {
-            placeholderImabeView.setImageResource(getThumbForNameOrMime(text, type));
-            placeholderImabeView.setVisibility(VISIBLE);
+            placeholderImageView.setImageResource(getThumbForNameOrMime(text, type));
+            placeholderImageView.setVisibility(VISIBLE);
         } else {
-            placeholderImabeView.setVisibility(INVISIBLE);
+            placeholderImageView.setVisibility(INVISIBLE);
         }
         if (thumb != null || resId != 0) {
             if (thumb != null) {
                 thumbImageView.setImage(thumb, "40_40", null);
-            } else  {
-                thumbImageView.setImageResource(resId);
+            } else {
+                Drawable drawable = Theme.createCircleDrawableWithIcon(AndroidUtilities.dp(40), resId);
+                Theme.setCombinedDrawableColor(drawable, Theme.getColor(Theme.key_files_folderIconBackground), false);
+                Theme.setCombinedDrawableColor(drawable, Theme.getColor(Theme.key_files_folderIcon), true);
+                thumbImageView.setImageDrawable(drawable);
             }
             thumbImageView.setVisibility(VISIBLE);
         } else {
+            thumbImageView.setImageBitmap(null);
             thumbImageView.setVisibility(INVISIBLE);
         }
     }
@@ -198,34 +199,54 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
         checkBox.setChecked(checked, animated);
     }
 
-    public void setDocument(MessageObject document, boolean divider) {
+    public void setDocument(MessageObject messageObject, boolean divider) {
         needDivider = divider;
-        message = document;
+        message = messageObject;
         loaded = false;
         loading = false;
 
-        if (document != null && document.messageOwner.media != null && document.messageOwner.media.document != null) {
+        if (messageObject != null && messageObject.getDocument() != null) {
             int idx;
-            String name = FileLoader.getDocumentFileName(document.messageOwner.media.document);
-            placeholderImabeView.setVisibility(VISIBLE);
-            extTextView.setVisibility(VISIBLE);
-            placeholderImabeView.setImageResource(getThumbForNameOrMime(name, document.messageOwner.media.document.mime_type));
+            String name = null;
+            if (messageObject.isMusic()) {
+                TLRPC.Document document;
+                if (messageObject.type == 0) {
+                    document = messageObject.messageOwner.media.webpage.document;
+                } else {
+                    document = messageObject.messageOwner.media.document;
+                }
+                for (int a = 0; a < document.attributes.size(); a++) {
+                    TLRPC.DocumentAttribute attribute = document.attributes.get(a);
+                    if (attribute instanceof TLRPC.TL_documentAttributeAudio) {
+                        if (attribute.performer != null && attribute.performer.length() != 0 || attribute.title != null && attribute.title.length() != 0) {
+                            name = messageObject.getMusicAuthor() + " - " + messageObject.getMusicTitle();
+                        }
+                    }
+                }
+            }
+            String fileName = FileLoader.getDocumentFileName(messageObject.getDocument());
+            if (name == null) {
+                name = fileName;
+            }
             nameTextView.setText(name);
-            extTextView.setText((idx = name.lastIndexOf(".")) == -1 ? "" : name.substring(idx + 1).toLowerCase());
-            if (document.messageOwner.media.document.thumb instanceof TLRPC.TL_photoSizeEmpty || document.messageOwner.media.document.thumb == null) {
+            placeholderImageView.setVisibility(VISIBLE);
+            extTextView.setVisibility(VISIBLE);
+            placeholderImageView.setImageResource(getThumbForNameOrMime(fileName, messageObject.getDocument().mime_type));
+            extTextView.setText((idx = fileName.lastIndexOf('.')) == -1 ? "" : fileName.substring(idx + 1).toLowerCase());
+            if (messageObject.getDocument().thumb instanceof TLRPC.TL_photoSizeEmpty || messageObject.getDocument().thumb == null) {
                 thumbImageView.setVisibility(INVISIBLE);
                 thumbImageView.setImageBitmap(null);
             } else {
                 thumbImageView.setVisibility(VISIBLE);
-                thumbImageView.setImage(document.messageOwner.media.document.thumb.location, "40_40", (Drawable) null);
+                thumbImageView.setImage(messageObject.getDocument().thumb.location, "40_40", (Drawable) null);
             }
-            long date = (long) document.messageOwner.date * 1000;
-            dateTextView.setText(String.format("%s, %s", AndroidUtilities.formatFileSize(document.messageOwner.media.document.size), LocaleController.formatString("formatDateAtTime", R.string.formatDateAtTime, LocaleController.getInstance().formatterYear.format(new Date(date)), LocaleController.getInstance().formatterDay.format(new Date(date)))));
+            long date = (long) messageObject.messageOwner.date * 1000;
+            dateTextView.setText(String.format("%s, %s", AndroidUtilities.formatFileSize(messageObject.getDocument().size), LocaleController.formatString("formatDateAtTime", R.string.formatDateAtTime, LocaleController.getInstance().formatterYear.format(new Date(date)), LocaleController.getInstance().formatterDay.format(new Date(date)))));
         } else {
             nameTextView.setText("");
             extTextView.setText("");
             dateTextView.setText("");
-            placeholderImabeView.setVisibility(VISIBLE);
+            placeholderImageView.setVisibility(VISIBLE);
             extTextView.setVisibility(VISIBLE);
             thumbImageView.setVisibility(INVISIBLE);
             thumbImageView.setImageBitmap(null);
@@ -243,7 +264,7 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
             if (message.messageOwner.attachPath == null || message.messageOwner.attachPath.length() == 0 || !(new File(message.messageOwner.attachPath).exists())) {
                 cacheFile = FileLoader.getPathToMessage(message.messageOwner);
                 if (!cacheFile.exists()) {
-                    fileName = FileLoader.getAttachFileName(message.messageOwner.media.document);
+                    fileName = FileLoader.getAttachFileName(message.getDocument());
                 }
             }
             loaded = false;
@@ -281,7 +302,7 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
         }
     }
 
-    public MessageObject getDocument() {
+    public MessageObject getMessage() {
         return message;
     }
 
@@ -295,13 +316,13 @@ public class SharedDocumentCell extends FrameLayout implements MediaController.F
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(56) + (needDivider ? 1 : 0), MeasureSpec.EXACTLY));
+        super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(56) + (needDivider ? 1 : 0), MeasureSpec.EXACTLY));
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         if (needDivider) {
-            canvas.drawLine(AndroidUtilities.dp(72), getHeight() - 1, getWidth() - getPaddingRight(), getHeight() - 1, paint);
+            canvas.drawLine(AndroidUtilities.dp(72), getHeight() - 1, getWidth() - getPaddingRight(), getHeight() - 1, Theme.dividerPaint);
         }
     }
 

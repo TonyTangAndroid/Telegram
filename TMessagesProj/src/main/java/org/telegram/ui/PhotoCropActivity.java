@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui;
@@ -15,7 +15,6 @@ import android.graphics.Paint;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -29,6 +28,7 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
 
 import java.io.File;
@@ -55,16 +55,6 @@ public class PhotoCropActivity extends BaseFragment {
 
         public PhotoCropView(Context context) {
             super(context);
-            init();
-        }
-
-        public PhotoCropView(Context context, AttributeSet attrs) {
-            super(context, attrs);
-            init();
-        }
-
-        public PhotoCropView(Context context, AttributeSet attrs, int defStyle) {
-            super(context, attrs, defStyle);
             init();
         }
 
@@ -323,7 +313,7 @@ public class PhotoCropActivity extends BaseFragment {
                 try {
                     return Bitmaps.createBitmap(imageToCrop, x, y, sizeX, sizeY);
                 } catch (Throwable e2) {
-                    FileLog.e("tmessages", e2);
+                    FileLog.e(e2);
                 }
             }
             return null;
@@ -336,7 +326,7 @@ public class PhotoCropActivity extends BaseFragment {
                     drawable.setBounds(bitmapX, bitmapY, bitmapX + bitmapWidth, bitmapY + bitmapHeight);
                     drawable.draw(canvas);
                 } catch (Throwable e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
             }
             canvas.drawRect(bitmapX, bitmapY, bitmapX + bitmapWidth, rectY, halfPaint);
@@ -428,8 +418,9 @@ public class PhotoCropActivity extends BaseFragment {
 
     @Override
     public View createView(Context context) {
-        actionBar.setBackgroundColor(0xff333333);
-        actionBar.setItemsBackground(R.drawable.bar_selector_picker);
+        actionBar.setBackgroundColor(Theme.ACTION_BAR_MEDIA_PICKER_COLOR);
+        actionBar.setItemsBackgroundColor(Theme.ACTION_BAR_PICKER_SELECTOR_COLOR, false);
+        actionBar.setTitleColor(0xffffffff);
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle(LocaleController.getString("CropImage", R.string.CropImage));

@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Components;
@@ -18,10 +18,14 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.support.v4.content.FileProvider;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.MediaController;
+import org.telegram.messenger.VideoEditedInfo;
+import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
@@ -66,12 +70,18 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
             Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             File image = AndroidUtilities.generatePicturePath();
             if (image != null) {
-                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(image));
+                if (Build.VERSION.SDK_INT >= 24) {
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(parentFragment.getParentActivity(), BuildConfig.APPLICATION_ID + ".provider", image));
+                    takePictureIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    takePictureIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } else {
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(image));
+                }
                 currentPicturePath = image.getAbsolutePath();
             }
             parentFragment.startActivityForResult(takePictureIntent, 13);
         } catch (Exception e) {
-            FileLog.e("tmessages", e);
+            FileLog.e(e);
         }
     }
 
@@ -82,10 +92,10 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                 return;
             }
         }
-        PhotoAlbumPickerActivity fragment = new PhotoAlbumPickerActivity(true, null);
+        PhotoAlbumPickerActivity fragment = new PhotoAlbumPickerActivity(true, false, false, null);
         fragment.setDelegate(new PhotoAlbumPickerActivity.PhotoAlbumPickerActivityDelegate() {
             @Override
-            public void didSelectPhotos(ArrayList<String> photos, ArrayList<String> captions, ArrayList<MediaController.SearchImage> webPhotos) {
+            public void didSelectPhotos(ArrayList<String> photos, ArrayList<String> captions, ArrayList<ArrayList<TLRPC.InputDocument>> masks, ArrayList<MediaController.SearchImage> webPhotos) {
                 if (!photos.isEmpty()) {
                     Bitmap bitmap = ImageLoader.loadBitmap(photos.get(0), null, 800, 800, true);
                     processBitmap(bitmap);
@@ -99,13 +109,13 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                     photoPickerIntent.setType("image/*");
                     parentFragment.startActivityForResult(photoPickerIntent, 14);
                 } catch (Exception e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
             }
 
             @Override
-            public boolean didSelectVideo(String path) {
-                return true;
+            public void didSelectVideo(String path, VideoEditedInfo info, long estimatedSize, long estimatedDuration, String caption) {
+
             }
         });
         parentFragment.presentFragment(fragment);
@@ -113,7 +123,7 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
 
     private void startCrop(String path, Uri uri) {
         try {
-            LaunchActivity activity = (LaunchActivity)parentFragment.getParentActivity();
+            LaunchActivity activity = (LaunchActivity) parentFragment.getParentActivity();
             if (activity == null) {
                 return;
             }
@@ -127,7 +137,7 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
             photoCropActivity.setDelegate(this);
             activity.presentFragment(photoCropActivity);
         } catch (Exception e) {
-            FileLog.e("tmessages", e);
+            FileLog.e(e);
             Bitmap bitmap = ImageLoader.loadBitmap(path, uri, 800, 800, true);
             processBitmap(bitmap);
         }
@@ -141,7 +151,7 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                 try {
                     ExifInterface ei = new ExifInterface(currentPicturePath);
                     int exif = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-                    switch(exif) {
+                    switch (exif) {
                         case ExifInterface.ORIENTATION_ROTATE_90:
                             orientation = 90;
                             break;
@@ -153,13 +163,13 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                             break;
                     }
                 } catch (Exception e) {
-                    FileLog.e("tmessages", e);
+                    FileLog.e(e);
                 }
                 final ArrayList<Object> arrayList = new ArrayList<>();
                 arrayList.add(new MediaController.PhotoEntry(0, 0, 0, currentPicturePath, orientation, false));
                 PhotoViewer.getInstance().openPhotoForSelect(arrayList, 0, 1, new PhotoViewer.EmptyPhotoViewerProvider() {
                     @Override
-                    public void sendButtonPressed(int index) {
+                    public void sendButtonPressed(int index, VideoEditedInfo videoEditedInfo) {
                         String path = null;
                         MediaController.PhotoEntry photoEntry = (MediaController.PhotoEntry) arrayList.get(0);
                         if (photoEntry.imagePath != null) {
@@ -169,6 +179,11 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                         }
                         Bitmap bitmap = ImageLoader.loadBitmap(path, null, 800, 800, true);
                         processBitmap(bitmap);
+                    }
+
+                    @Override
+                    public boolean allowCaption() {
+                        return false;
                     }
                 }, null);
                 AndroidUtilities.addMediaToGallery(currentPicturePath);
@@ -199,7 +214,7 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                 uploadingAvatar = FileLoader.getInstance().getDirectory(FileLoader.MEDIA_DIR_CACHE) + "/" + bigPhoto.location.volume_id + "_" + bigPhoto.location.local_id + ".jpg";
                 NotificationCenter.getInstance().addObserver(AvatarUpdater.this, NotificationCenter.FileDidUpload);
                 NotificationCenter.getInstance().addObserver(AvatarUpdater.this, NotificationCenter.FileDidFailUpload);
-                FileLoader.getInstance().uploadFile(uploadingAvatar, false, true);
+                FileLoader.getInstance().uploadFile(uploadingAvatar, false, true, ConnectionsManager.FileTypePhoto);
             }
         }
     }
@@ -212,12 +227,12 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
     @Override
     public void didReceivedNotification(int id, final Object... args) {
         if (id == NotificationCenter.FileDidUpload) {
-            String location = (String)args[0];
+            String location = (String) args[0];
             if (uploadingAvatar != null && location.equals(uploadingAvatar)) {
                 NotificationCenter.getInstance().removeObserver(AvatarUpdater.this, NotificationCenter.FileDidUpload);
                 NotificationCenter.getInstance().removeObserver(AvatarUpdater.this, NotificationCenter.FileDidFailUpload);
                 if (delegate != null) {
-                    delegate.didUploadedPhoto((TLRPC.InputFile)args[1], smallPhoto, bigPhoto);
+                    delegate.didUploadedPhoto((TLRPC.InputFile) args[1], smallPhoto, bigPhoto);
                 }
                 uploadingAvatar = null;
                 if (clearAfterUpdate) {
@@ -226,7 +241,7 @@ public class AvatarUpdater implements NotificationCenter.NotificationCenterDeleg
                 }
             }
         } else if (id == NotificationCenter.FileDidFailUpload) {
-            String location = (String)args[0];
+            String location = (String) args[0];
             if (uploadingAvatar != null && location.equals(uploadingAvatar)) {
                 NotificationCenter.getInstance().removeObserver(AvatarUpdater.this, NotificationCenter.FileDidUpload);
                 NotificationCenter.getInstance().removeObserver(AvatarUpdater.this, NotificationCenter.FileDidFailUpload);

@@ -3,14 +3,13 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Cells;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -35,8 +34,9 @@ public class StickerEmojiCell extends FrameLayout {
     private long lastUpdateTime;
     private boolean scaled;
     private float scale;
-    private long time = 0;
-    private AccelerateInterpolator interpolator = new AccelerateInterpolator(0.5f);
+    private long time;
+    private boolean recent;
+    private static AccelerateInterpolator interpolator = new AccelerateInterpolator(0.5f);
 
     public StickerEmojiCell(Context context) {
         super(context);
@@ -54,6 +54,14 @@ public class StickerEmojiCell extends FrameLayout {
         return sticker;
     }
 
+    public boolean isRecent() {
+        return recent;
+    }
+
+    public void setRecent(boolean value) {
+        recent = value;
+    }
+
     public void setSticker(TLRPC.Document document, boolean showEmoji) {
         if (document != null) {
             sticker = document;
@@ -63,7 +71,8 @@ public class StickerEmojiCell extends FrameLayout {
 
             if (showEmoji) {
                 boolean set = false;
-                for (TLRPC.DocumentAttribute attribute : document.attributes) {
+                for (int a = 0; a < document.attributes.size(); a++) {
+                    TLRPC.DocumentAttribute attribute = document.attributes.get(a);
                     if (attribute instanceof TLRPC.TL_documentAttributeSticker) {
                         if (attribute.alt != null && attribute.alt.length() > 0) {
                             emojiTextView.setText(Emoji.replaceEmoji(attribute.alt, emojiTextView.getPaint().getFontMetricsInt(), AndroidUtilities.dp(16), false));
@@ -107,6 +116,12 @@ public class StickerEmojiCell extends FrameLayout {
     }
 
     @Override
+    public void invalidate() {
+        emojiTextView.invalidate();
+        super.invalidate();
+    }
+
+    @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
         boolean result = super.drawChild(canvas, child, drawingTime);
         if (child == imageView && (changingAlpha || scaled && scale != 0.8f || !scaled && scale != 1.0f)) {
@@ -135,10 +150,8 @@ public class StickerEmojiCell extends FrameLayout {
                     scale = 1.0f;
                 }
             }
-            if (Build.VERSION.SDK_INT >= 11) {
-                imageView.setScaleX(scale);
-                imageView.setScaleY(scale);
-            }
+            imageView.setScaleX(scale);
+            imageView.setScaleY(scale);
             imageView.invalidate();
             invalidate();
         }

@@ -3,14 +3,15 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Cells;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.os.Build;
 import android.text.TextUtils;
@@ -22,10 +23,10 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.AnimationCompat.ViewProxy;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.LayoutHelper;
 
@@ -41,18 +42,11 @@ public class StickerSetCell extends FrameLayout {
     private TLRPC.TL_messages_stickerSet stickersSet;
     private Rect rect = new Rect();
 
-    private static Paint paint;
-
     public StickerSetCell(Context context) {
         super(context);
 
-        if (paint == null) {
-            paint = new Paint();
-            paint.setColor(0xffd9d9d9);
-        }
-
         textView = new TextView(context);
-        textView.setTextColor(0xff212121);
+        textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         textView.setLines(1);
         textView.setMaxLines(1);
@@ -62,7 +56,7 @@ public class StickerSetCell extends FrameLayout {
         addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT, LocaleController.isRTL ? 40 : 71, 10, LocaleController.isRTL ? 71 : 40, 0));
 
         valueTextView = new TextView(context);
-        valueTextView.setTextColor(0xff8a8a8a);
+        valueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2));
         valueTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         valueTextView.setLines(1);
         valueTextView.setMaxLines(1);
@@ -74,30 +68,13 @@ public class StickerSetCell extends FrameLayout {
         imageView.setAspectFit(true);
         addView(imageView, LayoutHelper.createFrame(48, 48, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 0 : 12, 8, LocaleController.isRTL ? 12 : 0, 0));
 
-        optionsButton = new ImageView(context) {
-            @Override
-            public boolean onTouchEvent(MotionEvent event) {
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    StickerSetCell.this.getParent().requestDisallowInterceptTouchEvent(true);
-                }
-                return super.onTouchEvent(event);
-            }
-        };
-        optionsButton.setBackgroundResource(R.drawable.bar_selector_grey);
-        optionsButton.setImageResource(R.drawable.doc_actions_b);
+        optionsButton = new ImageView(context);
+        optionsButton.setFocusable(false);
+        optionsButton.setBackgroundDrawable(Theme.createSelectorDrawable(Theme.getColor(Theme.key_stickers_menuSelector)));
+        optionsButton.setImageResource(R.drawable.msg_actions);
+        optionsButton.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_stickers_menu), PorterDuff.Mode.MULTIPLY));
         optionsButton.setScaleType(ImageView.ScaleType.CENTER);
         addView(optionsButton, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP));
-
-        /*ActionBarMenuItem menuItem = new ActionBarMenuItem(context, null, R.drawable.bar_selector_grey);
-        menuItem.setIcon(R.drawable.doc_actions_b);
-        addView(menuItem, LayoutHelper.createFrame(40, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, LocaleController.isRTL ? 40 : 0, 0, LocaleController.isRTL ? 0 : 40, 0));
-        menuItem.addSubItem(1, "test", 0);
-        menuItem.addSubItem(2, "test", 0);
-        menuItem.addSubItem(3, "test", 0);
-        menuItem.addSubItem(4, "test", 0);
-        menuItem.addSubItem(5, "test", 0);
-        menuItem.addSubItem(6, "test", 0);
-        menuItem.addSubItem(7, "test", 0);*/
     }
 
     @Override
@@ -110,14 +87,14 @@ public class StickerSetCell extends FrameLayout {
         stickersSet = set;
 
         textView.setText(stickersSet.set.title);
-        if (stickersSet.set.disabled) {
-            ViewProxy.setAlpha(textView, 0.5f);
-            ViewProxy.setAlpha(valueTextView, 0.5f);
-            ViewProxy.setAlpha(imageView, 0.5f);
+        if (stickersSet.set.archived) {
+            textView.setAlpha(0.5f);
+            valueTextView.setAlpha(0.5f);
+            imageView.setAlpha(0.5f);
         } else {
-            ViewProxy.setAlpha(textView, 1.0f);
-            ViewProxy.setAlpha(valueTextView, 1.0f);
-            ViewProxy.setAlpha(imageView, 1.0f);
+            textView.setAlpha(1.0f);
+            valueTextView.setAlpha(1.0f);
+            imageView.setAlpha(1.0f);
         }
         ArrayList<TLRPC.Document> documents = set.documents;
         if (documents != null && !documents.isEmpty()) {
@@ -146,9 +123,6 @@ public class StickerSetCell extends FrameLayout {
             if (rect.contains((int) event.getX(), (int) event.getY())) {
                 return true;
             }
-            if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
-                getBackground().setHotspot(event.getX(), event.getY());
-            }
         }
         return super.onTouchEvent(event);
     }
@@ -156,7 +130,7 @@ public class StickerSetCell extends FrameLayout {
     @Override
     protected void onDraw(Canvas canvas) {
         if (needDivider) {
-            canvas.drawLine(0, getHeight() - 1, getWidth() - getPaddingRight(), getHeight() - 1, paint);
+            canvas.drawLine(0, getHeight() - 1, getWidth() - getPaddingRight(), getHeight() - 1, Theme.dividerPaint);
         }
     }
 }

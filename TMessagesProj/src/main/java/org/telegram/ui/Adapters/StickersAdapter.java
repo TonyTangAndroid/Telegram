@@ -3,14 +3,13 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.ui.Adapters;
 
 import android.content.Context;
 import android.text.TextUtils;
-import android.view.View;
 import android.view.ViewGroup;
 
 import org.telegram.messenger.NotificationCenter;
@@ -19,12 +18,15 @@ import org.telegram.messenger.support.widget.RecyclerView;
 import org.telegram.messenger.FileLoader;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.Cells.StickerCell;
+import org.telegram.ui.Components.RecyclerListView;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 
-public class StickersAdapter extends RecyclerView.Adapter implements NotificationCenter.NotificationCenterDelegate {
+public class StickersAdapter extends RecyclerListView.SelectionAdapter implements NotificationCenter.NotificationCenterDelegate {
 
     private Context mContext;
     private ArrayList<TLRPC.Document> stickers;
@@ -37,17 +39,11 @@ public class StickersAdapter extends RecyclerView.Adapter implements Notificatio
         void needChangePanelVisibility(boolean show);
     }
 
-    private class Holder extends RecyclerView.ViewHolder {
-
-        public Holder(View itemView) {
-            super(itemView);
-        }
-    }
-
     public StickersAdapter(Context context, StickersAdapterDelegate delegate) {
         mContext = context;
         this.delegate = delegate;
-        StickersQuery.checkStickers();
+        StickersQuery.checkStickers(StickersQuery.TYPE_IMAGE);
+        StickersQuery.checkStickers(StickersQuery.TYPE_MASK);
         NotificationCenter.getInstance().addObserver(this, NotificationCenter.FileDidLoaded);
         NotificationCenter.getInstance().addObserver(this, NotificationCenter.FileDidFailedLoad);
     }
@@ -92,12 +88,14 @@ public class StickersAdapter extends RecyclerView.Adapter implements Notificatio
         if (search) {
             int length = emoji.length();
             for (int a = 0; a < length; a++) {
-                if (a < length - 1 && emoji.charAt(a) == 0xD83C && emoji.charAt(a + 1) >= 0xDFFB && emoji.charAt(a + 1) <= 0xDFFF) {
+                if (a < length - 1 && (emoji.charAt(a) == 0xD83C && emoji.charAt(a + 1) >= 0xDFFB && emoji.charAt(a + 1) <= 0xDFFF || emoji.charAt(a) == 0x200D && (emoji.charAt(a + 1) == 0x2640 || emoji.charAt(a + 1) == 0x2642))) {
                     emoji = TextUtils.concat(emoji.subSequence(0, a), emoji.subSequence(a + 2, emoji.length()));
-                    break;
+                    length -= 2;
+                    a--;
                 } else if (emoji.charAt(a) == 0xfe0f) {
                     emoji = TextUtils.concat(emoji.subSequence(0, a), emoji.subSequence(a + 1, emoji.length()));
                     length--;
+                    a--;
                 }
             }
             lastSticker = emoji.toString();
@@ -110,7 +108,34 @@ public class StickersAdapter extends RecyclerView.Adapter implements Notificatio
                         visible = false;
                     }
                 } else {
-                    stickers = newStickers;
+                    stickers = newStickers != null && !newStickers.isEmpty() ? new ArrayList<>(newStickers) : null;
+                    if (stickers != null) {
+                        final ArrayList<TLRPC.Document> recentStickers = StickersQuery.getRecentStickersNoCopy(StickersQuery.TYPE_IMAGE);
+                        if (!recentStickers.isEmpty()) {
+                            Collections.sort(stickers, new Comparator<TLRPC.Document>() {
+                                private int getIndex(long id) {
+                                    for (int a = 0; a < recentStickers.size(); a++) {
+                                        if (recentStickers.get(a).id == id) {
+                                            return a;
+                                        }
+                                    }
+                                    return -1;
+                                }
+
+                                @Override
+                                public int compare(TLRPC.Document lhs, TLRPC.Document rhs) {
+                                    int idx1 = getIndex(lhs.id);
+                                    int idx2 = getIndex(rhs.id);
+                                    if (idx1 > idx2) {
+                                        return -1;
+                                    } else if (idx1 < idx2) {
+                                        return 1;
+                                    }
+                                    return 0;
+                                }
+                            });
+                        }
+                    }
                     checkStickerFilesExistAndDownload();
                     delegate.needChangePanelVisibility(stickers != null && !stickers.isEmpty() && stickersToLoad.isEmpty());
                     notifyDataSetChanged();
@@ -143,14 +168,14 @@ public class StickersAdapter extends RecyclerView.Adapter implements Notificatio
     }
 
     @Override
-    public long getItemId(int i) {
-        return i;
+    public boolean isEnabled(RecyclerView.ViewHolder holder) {
+        return true;
     }
 
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup viewGroup, int i) {
         StickerCell view = new StickerCell(mContext);
-        return new Holder(view);
+        return new RecyclerListView.Holder(view);
     }
 
     @Override

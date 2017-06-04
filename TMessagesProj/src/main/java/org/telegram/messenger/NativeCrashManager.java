@@ -7,6 +7,7 @@ import android.util.Log;
 import net.hockeyapp.android.Constants;
 import net.hockeyapp.android.utils.SimpleMultipartEntity;
 
+import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -36,7 +37,6 @@ public class NativeCrashManager {
         try {
             String filename = UUID.randomUUID().toString();
             String path = Constants.FILES_PATH + "/" + filename + ".faketrace";
-            Log.d(Constants.TAG, "Writing unhandled exception to: " + path);
             BufferedWriter write = new BufferedWriter(new FileWriter(path));
             write.write("Package: " + Constants.APP_PACKAGE + "\n");
             write.write("Version Code: " + Constants.APP_VERSION + "\n");
@@ -51,7 +51,7 @@ public class NativeCrashManager {
             write.close();
             return filename + ".faketrace";
         } catch (Exception e) {
-            FileLog.e("tmessages", e);
+            FileLog.e(e);
         }
 
         return null;
@@ -71,7 +71,7 @@ public class NativeCrashManager {
 
                     attachmentUri = Uri.fromFile(new File(Constants.FILES_PATH, logFilename));
                     input = activity.getContentResolver().openInputStream(attachmentUri);
-                    entity.addPart("log", attachmentUri.getLastPathSegment(), input, false);
+                    entity.addPart("log", attachmentUri.getLastPathSegment(), input, true);
 
                     entity.writeLastBoundaryIfNeeds();
 
@@ -80,9 +80,15 @@ public class NativeCrashManager {
                     urlConnection.setRequestMethod("POST");
                     urlConnection.setRequestProperty("Content-Type", entity.getContentType());
                     urlConnection.setRequestProperty("Content-Length", String.valueOf(entity.getContentLength()));
-                    urlConnection.getOutputStream().write(entity.getOutputStream().toByteArray());
+
+                    BufferedOutputStream outputStream = new BufferedOutputStream(urlConnection.getOutputStream());
+                    outputStream.write(entity.getOutputStream().toByteArray());
+                    outputStream.flush();
+                    outputStream.close();
 
                     urlConnection.connect();
+
+                    FileLog.e("response code = " + urlConnection.getResponseCode() + " message = " + urlConnection.getResponseMessage());
                 } catch (IOException e) {
                     e.printStackTrace();
                 } finally {
@@ -107,7 +113,6 @@ public class NativeCrashManager {
             };
             return dir.list(filter);
         } else {
-            FileLog.d(Constants.TAG, "Can't search for exception as file path is null.");
             return new String[0];
         }
     }

@@ -3,7 +3,7 @@
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2015.
+ * Copyright Nikolai Kudashov, 2013-2017.
  */
 
 package org.telegram.messenger;
@@ -16,9 +16,9 @@ import android.support.v4.app.NotificationManagerCompat;
 
 public class VideoEncodingService extends Service implements NotificationCenter.NotificationCenterDelegate {
 
-    private NotificationCompat.Builder builder = null;
-    private String path = null;
-    private int currentProgress = 0;
+    private NotificationCompat.Builder builder;
+    private String path;
+    private int currentProgress;
 
     public VideoEncodingService() {
         super();
@@ -34,7 +34,7 @@ public class VideoEncodingService extends Service implements NotificationCenter.
         stopForeground(true);
         NotificationCenter.getInstance().removeObserver(this, NotificationCenter.FileUploadProgressChanged);
         NotificationCenter.getInstance().removeObserver(this, NotificationCenter.stopEncodingService);
-        FileLog.e("tmessages", "destroy video service");
+        FileLog.e("destroy video service");
     }
 
     @Override
@@ -46,7 +46,11 @@ public class VideoEncodingService extends Service implements NotificationCenter.
                 Boolean enc = (Boolean) args[2];
                 currentProgress = (int)(progress * 100);
                 builder.setProgress(100, currentProgress, currentProgress == 0);
-                NotificationManagerCompat.from(ApplicationLoader.applicationContext).notify(4, builder.build());
+                try {
+                    NotificationManagerCompat.from(ApplicationLoader.applicationContext).notify(4, builder.build());
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                }
             }
         } else if (id == NotificationCenter.stopEncodingService) {
             String filepath = (String)args[0];
@@ -58,18 +62,24 @@ public class VideoEncodingService extends Service implements NotificationCenter.
 
     public int onStartCommand(Intent intent, int flags, int startId) {
         path = intent.getStringExtra("path");
+        boolean isGif = intent.getBooleanExtra("gif", false);
         if (path == null) {
             stopSelf();
             return Service.START_NOT_STICKY;
         }
-        FileLog.e("tmessages", "start video service");
+        FileLog.e("start video service");
         if (builder == null) {
             builder = new NotificationCompat.Builder(ApplicationLoader.applicationContext);
             builder.setSmallIcon(android.R.drawable.stat_sys_upload);
             builder.setWhen(System.currentTimeMillis());
             builder.setContentTitle(LocaleController.getString("AppName", R.string.AppName));
-            builder.setTicker(LocaleController.getString("SendingVideo", R.string.SendingVideo));
-            builder.setContentText(LocaleController.getString("SendingVideo", R.string.SendingVideo));
+            if (isGif) {
+                builder.setTicker(LocaleController.getString("SendingGif", R.string.SendingGif));
+                builder.setContentText(LocaleController.getString("SendingGif", R.string.SendingGif));
+            } else {
+                builder.setTicker(LocaleController.getString("SendingVideo", R.string.SendingVideo));
+                builder.setContentText(LocaleController.getString("SendingVideo", R.string.SendingVideo));
+            }
         }
         currentProgress = 0;
         builder.setProgress(100, currentProgress, currentProgress == 0);
